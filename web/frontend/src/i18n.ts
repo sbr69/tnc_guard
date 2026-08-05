@@ -73,6 +73,8 @@ export const translations = {
     noClauseSelected: "No Clause Selected",
     selectClauseDesc: "Select a clause from the sidebar to view dynamic analysis.",
     clear: "Clear",
+    shareLink: "Share Link",
+    shareLinkToast: "Share link copied to clipboard!",
 
     // Extension Reports translations
     privacyPolicy: "Privacy Policy",

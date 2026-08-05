@@ -11,20 +11,34 @@ function App() {
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    // Listen for /reports URL path or query parameter
-    if (window.location.pathname.includes('/reports') || window.location.search.includes('view=reports')) {
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    const docIdParam = params.get('docId');
+
+    if (window.location.pathname.includes('/reports') || viewParam === 'reports') {
       setView('reports');
+    } else if (docIdParam) {
+      setSelectedDocId(docIdParam);
+      setView('analyzer');
+    } else if (viewParam === 'analyzer') {
+      setView('analyzer');
     }
   }, []);
 
   const handleStartAnalyzer = (docId?: string) => {
     setSelectedDocId(docId);
     setView('analyzer');
+    if (docId) {
+      window.history.pushState({}, '', `?docId=${docId}`);
+    } else {
+      window.history.pushState({}, '', `?view=analyzer`);
+    }
   };
 
   const handleBackToHome = () => {
     setSelectedDocId(undefined);
     setView('landing');
+    window.history.pushState({}, '', '/');
   };
 
   return (
@@ -43,7 +57,7 @@ function App() {
         {/* Global Page Switcher */}
         <div className="flex items-center space-x-2 bg-orange-50/70 p-1.5 rounded-2xl border border-orange-100">
           <button
-            onClick={() => setView('landing')}
+            onClick={() => { setView('landing'); window.history.pushState({}, '', '/'); }}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               view === 'landing' 
                 ? 'bg-orange-500 text-white shadow-sm' 
@@ -55,7 +69,7 @@ function App() {
           </button>
           
           <button
-            onClick={() => setView('analyzer')}
+            onClick={() => { setView('analyzer'); window.history.pushState({}, '', '?view=analyzer'); }}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               view === 'analyzer' 
                 ? 'bg-orange-500 text-white shadow-sm' 
@@ -67,7 +81,7 @@ function App() {
           </button>
 
           <button
-            onClick={() => setView('reports')}
+            onClick={() => { setView('reports'); window.history.pushState({}, '', '?view=reports'); }}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               view === 'reports' 
                 ? 'bg-orange-500 text-white shadow-sm' 
@@ -83,7 +97,7 @@ function App() {
           <ClayButton 
             variant="primary" 
             className="px-3! py-1.5! text-xs"
-            onClick={() => setView('reports')}
+            onClick={() => { setView('reports'); window.history.pushState({}, '', '?view=reports'); }}
           >
             {t('checkExtensionDemoNav')}
           </ClayButton>

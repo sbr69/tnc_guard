@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { FileText, ArrowRight, ShieldCheck, HelpCircle, FileCheck, Layers, FileWarning } from 'lucide-react';
 import { ClayCard } from './ClayCard';
 import { ClayButton } from './ClayButton';
-import { mockDocuments } from '../mockData';
+import { getDemoDocuments } from '../api/client';
 import { t } from '../i18n';
 
 interface LandingPageProps {
@@ -11,6 +11,12 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
+  const [demoDocs, setDemoDocs] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    getDemoDocuments().then(setDemoDocs).catch(console.error);
+  }, []);
+
   // SVG Mock Logos
   const mockLogos = [
     { name: 'TenantUnion', svg: (
@@ -276,7 +282,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {mockDocuments.map((doc) => (
+          {demoDocs.map((doc) => (
             <motion.div
               key={doc.id}
               whileHover={{ scale: 1.02 }}
@@ -288,14 +294,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                 <div className="space-y-4">
                   <div className="flex justify-between items-start">
                     <span className={`text-[10px] uppercase font-extrabold px-3 py-1 rounded-full ${
-                      doc.type === 'tos' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
+                      (doc.documentType || doc.type) === 'tos' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
                     }`}>
-                      {doc.type === 'tos' ? 'Terms of Service' : 'Rental Lease'}
+                      {doc.documentType === 'tos' ? 'Terms of Service' : 'Rental Lease'}
                     </span>
-                    <span className="text-xs text-gray-400">{doc.uploadDate}</span>
+                    <span className="text-xs text-gray-400">{doc.uploadDate || doc.upload_date}</span>
                   </div>
 
-                  <h3 className="text-xl font-bold text-gray-800">{doc.title}</h3>
+                  <h3 className="text-xl font-bold text-gray-800">{doc.title || doc.filename}</h3>
                   <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">{doc.summary}</p>
                 </div>
 
@@ -303,8 +309,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                   <div className="flex items-center space-x-2">
                     <span className="text-xs font-bold text-gray-600">{t('healthLabel')}</span>
                     <span className={`text-sm font-extrabold ${
-                      doc.healthScore > 60 ? 'text-green-600' : 'text-red-500'
-                    }`}>{doc.healthScore}/100</span>
+                      (doc.healthScore || doc.health_score) > 60 ? 'text-green-600' : 'text-red-500'
+                    }`}>{(doc.healthScore || doc.health_score)}/100</span>
                   </div>
                   <div className="text-orange-600 font-bold text-sm flex items-center space-x-1 hover:text-orange-700">
                     <span>{t('tryAnalyzer')}</span>

@@ -2,11 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Upload, FileText, ArrowLeft, AlertTriangle, CheckCircle, 
-  ShieldAlert, Download, Printer, Copy, Check, Filter 
+  ShieldAlert, Printer, Copy, Check, Filter, Link
 } from 'lucide-react';
 import { ClayCard } from './ClayCard';
 import { ClayButton } from './ClayButton';
-import { mockDocuments } from '../mockData';
 import { components } from '../api/types';
 import { getDemoDocuments } from '../api/client';
 import { useDocumentAnalysis } from '../hooks/useDocumentAnalysis';
@@ -51,7 +50,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Demo Documents list
-  const [demoDocs, setDemoDocs] = useState<any[]>(mockDocuments);
+  const [demoDocs, setDemoDocs] = useState<any[]>([]);
 
   // Load demo documents on mount
   useEffect(() => {
@@ -245,10 +244,13 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
           <div className="flex space-x-3">
             <ClayButton 
               variant="secondary" 
-              onClick={() => triggerToast('Generating PDF Report... ready for download.')}
-              icon={<Download size={15} />}
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href);
+                triggerToast(t('shareLinkToast'));
+              }}
+              icon={<Link size={15} />}
             >
-              {t('pdfReport')}
+              {t('shareLink')}
             </ClayButton>
             <ClayButton 
               variant="secondary" 

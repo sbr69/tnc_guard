@@ -163,3 +163,42 @@
     box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.8), inset -2px -2px 4px rgba(0, 0, 0, 0.05);
   }
 }
+
+/* PDF Print Export Styles */
+@media print {
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background-color: white !important;
+  }
+  
+  /* Hide navigation and controls */
+  header, .no-print, button {
+    display: none !important;
+  }
+  
+  /* Remove shadows for cleaner PDF rendering */
+  .clay-card, .clay-card-low, .clay-card-medium, .clay-card-high {
+    box-shadow: none !important;
+    border: 1px solid #E5E7EB !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  /* Ensure full width for printed report */
+  .print-full-width {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  
+  /* Expand scrollable areas */
+  .overflow-y-auto {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  
+  /* Adjust margins and layout */
+  .lg\:col-span-7, .lg\:col-span-5 {
+    grid-column: span 12 / span 12 !important;
+  }
+}
