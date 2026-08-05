@@ -1,0 +1,1045 @@
+# ClarifyLaw — Product Requirements Document (PRD)
+
+> **Product Name:** ClarifyLaw
+> **Tagline:** "Stop signing blind. Reveal hidden risks."
+> **Repository:** `c:\Users\SBR\Desktop\T&C\web`
+> **Date:** August 6, 2026
+
+---
+
+## Table of Contents
+
+1. [Product Vision & Target Users](#1-product-vision--target-users)
+2. [Brand & Design Language](#2-brand--design-language)
+3. [Tech Stack (Finalized)](#3-tech-stack-finalized)
+4. [Type-Sync Strategy (Python ↔ TypeScript)](#4-type-sync-strategy-python--typescript)
+5. [Repository Structure](#5-repository-structure)
+6. [System Architecture Overview](#6-system-architecture-overview)
+7. [Backend Pipeline (6 Stages)](#7-backend-pipeline-6-stages)
+8. [Data Models (Pydantic — Single Source of Truth)](#8-data-models-pydantic--single-source-of-truth)
+9. [Database Schema (Postgres + pgvector)](#9-database-schema-postgres--pgvector)
+10. [API Contract (FastAPI Endpoints)](#10-api-contract-fastapi-endpoints)
+11. [Reference Corpus Specification](#11-reference-corpus-specification)
+12. [Rule-Based Red-Flag Layer](#12-rule-based-red-flag-layer)
+13. [Gemini Integration Specification](#13-gemini-integration-specification)
+14. [Frontend Architecture (Existing)](#14-frontend-architecture-existing)
+15. [Frontend ↔ Backend Integration Changes](#15-frontend--backend-integration-changes)
+16. [Deployment & Hosting](#16-deployment--hosting)
+17. [Non-Functional Requirements](#17-non-functional-requirements)
+18. [Phased Execution Plan](#18-phased-execution-plan)
+
+---
+
+## 1. Product Vision & Target Users
+
+### What It Is
+
+ClarifyLaw is a web application that simplifies complex legal documents (terms of service, rental lease agreements, NDAs) by:
+
+1. Extracting and segmenting the document into individual clauses.
+2. Comparing each clause against a **reference corpus of labeled standard/fair clauses** using vector similarity (RAG).
+3. Running **deterministic red-flag keyword detection** in parallel.
+4. Feeding both signals into **Gemini Flash** for structured reasoning: risk classification, plain-language rewrite, and deviation explanation.
+5. Presenting results in an interactive UI with color-coded clause highlighting, side-by-side legalese vs. plain English, and a document-level health score.
+
+### What It Is NOT
+
+- Not a legal advice service. Every output includes a disclaimer.
+- Not a chatbot. It's a structured analysis pipeline with a fixed output format.
+- Not a general-purpose document summarizer. It specifically targets clause-level risk flagging against reference baselines.
+
+### Target Users
+
+| Persona | Use Case |
+|---------|----------|
+| **Tenants** | Upload a rental lease before signing. Spot illegal or unfair clauses (e.g., unannounced landlord entry, excessive late fees, non-refundable deposit deductions). |
+| **Freelancers / Contractors** | Upload NDAs, service agreements, or client contracts. Identify one-sided IP assignments, liability caps, or termination gotchas. |
+| **Consumers** | Paste or upload a SaaS terms of service. Understand auto-renewal traps, data selling clauses, class action waivers. |
+| **Small Business Owners** | Review vendor contracts, partnership agreements, or SaaS subscriptions before committing. |
+
+### Core Value Proposition
+
+> "Every clause gets a risk label grounded in comparison to real standard clauses — not LLM opinion. If we can't assess it, we say so."
+
+---
+
+## 2. Brand & Design Language
+
+> [!NOTE]
+> The frontend design system is already fully implemented. This section documents it for backend developers who need to understand the output format expectations.
+
+- **Brand Name:** ClarifyLaw
+- **Style:** Claymorphism (soft inner shadows, outer drop-shadows, rounded corners, tactile feel)
+- **Theme:** Light (warm Apricot & Peach palette)
+- **Font:** Outfit (Google Fonts) — rounded sans-serif for headings and body. Geist Mono for legal text blocks.
+- **Personality:** Tactile, Transparent, Guarded
+- **Color Palette:**
+  - Background: `#FFF7ED` — Surface: `#FFFFFF` — Ink: `#1F2937`
+  - Brand Primary: `#F97316` — Brand Hover: `#EA580C`
+  - Low Risk: green (`#F0FDF4` bg / `#15803D` text)
+  - Medium Risk: yellow (`#FEF9C3` bg / `#A16207` text)
+  - High Risk: red (`#FEF2F2` bg / `#B91C1C` text)
+
+---
+
+## 3. Tech Stack (Finalized)
+
+### Frontend (Already Built)
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Build Tool | Vite | 6.1.0 |
+| UI Library | React | 19.0.0 |
+| Language | TypeScript | 5.7.3 |
+| Styling | Tailwind CSS (via `@tailwindcss/vite`) | 4.0.0 |
+| Animation | Motion (formerly Framer Motion) | 12.0.0 |
+| Icons | Lucide React | 0.475.0 |
+
+### Backend (To Build)
+
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| Framework | **FastAPI** (Python) | Auto-generates OpenAPI spec at `/openapi.json` |
+| Language | **Python 3.12+** | |
+| PDF Parsing | **pdfplumber** | Preserves structural metadata (headers, numbering, bounding boxes) |
+| LLM | **Gemini 2.0 Flash** (free tier via `google-genai` SDK) | Structured JSON output via `response_schema` |
+| Embeddings | **Gemini `text-embedding-004`** (free tier) | 768-dimensional vectors |
+| Database | **Supabase Postgres + pgvector** (free tier) | Vector similarity search for RAG retrieval |
+| Dependency Mgmt | **`uv`** or **`pip` + `venv`** | Standard Python virtual environment |
+
+### Type Sync (Cross-Stack Glue)
+
+| Tool | Purpose |
+|------|---------|
+| **`openapi-typescript`** (npm) | Auto-generates TypeScript types from FastAPI's `/openapi.json` |
+| **Pydantic `alias_generator`** | Converts Python `snake_case` → JSON `camelCase` automatically |
+| **Zod** (optional, frontend) | Lightweight runtime validation at the API boundary only |
+
+---
+
+## 4. Type-Sync Strategy (Python ↔ TypeScript)
+
+This is a critical architectural decision. **Types are defined once, in Pydantic (backend), and flow forward.**
+
+### The Flow
+
+```
+Pydantic models (Python)          ← Single source of truth
+       │
+       ▼
+FastAPI auto-generates /openapi.json
+       │
+       ▼
+openapi-typescript (npm script)   ← Runs on `predev` and `prebuild`
+       │
+       ▼
+frontend/src/api/types.ts         ← Auto-generated, NEVER hand-edited
+```
+
+### Rules
+
+1. **Never hand-write frontend type interfaces for API data.** Delete `mockData.ts` types once the backend is live. All API response types come from the auto-generated `types.ts`.
+2. **Pydantic handles all validation.** The frontend does NOT re-validate API responses except optionally with Zod at the fetch boundary for runtime safety.
+3. **`snake_case` ↔ `camelCase` is handled by Pydantic's `alias_generator`.** One config line in the base model:
+   ```python
+   from pydantic import BaseModel, ConfigDict
+   from pydantic.alias_generators import to_camel
+
+   class CamelModel(BaseModel):
+       model_config = ConfigDict(
+           alias_generator=to_camel,
+           populate_by_name=True,  # Accept both snake_case and camelCase
+       )
+   ```
+   Every model inherits from `CamelModel`. FastAPI serializes JSON output with `camelCase` keys. The OpenAPI spec reflects `camelCase`. The generated TypeScript types are `camelCase`. No manual mapping anywhere.
+
+4. **Type generation is automated in `package.json`:**
+   ```json
+   {
+     "scripts": {
+       "generate-types": "openapi-typescript http://localhost:8000/openapi.json -o src/api/types.ts",
+       "predev": "npm run generate-types",
+       "prebuild": "npm run generate-types"
+     }
+   }
+   ```
+
+---
+
+## 5. Repository Structure
+
+```
+T&C/web/
+├── frontend/                          # Existing Vite + React app
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tsconfig.json
+│   └── src/
+│       ├── main.tsx
+│       ├── App.tsx
+│       ├── index.css                  # Claymorphic design system (Tailwind @theme)
+│       ├── i18n.ts                    # Internationalization strings
+│       ├── mockData.ts                # TEMPORARY — will be replaced by live API calls
+│       ├── api/                       # NEW — API client layer
+│       │   ├── types.ts               # AUTO-GENERATED by openapi-typescript (never hand-edit)
+│       │   └── client.ts              # Fetch wrapper for backend endpoints
+│       └── components/
+│           ├── ClayButton.tsx
+│           ├── ClayCard.tsx
+│           ├── LandingPage.tsx
+│           ├── AnalyzerWorkspace.tsx
+│           └── ReportsView.tsx
+│
+├── backend/                           # NEW — FastAPI Python backend
+│   ├── pyproject.toml                 # Python project config + dependencies
+│   ├── requirements.txt              # Pinned dependencies (fallback for deploy)
+│   ├── .env.example                   # Template for env vars
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                    # FastAPI app, CORS, lifespan
+│   │   ├── config.py                  # Settings via pydantic-settings
+│   │   ├── models/                    # Pydantic models (THE source of truth for all types)
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py                # CamelModel base class with alias_generator
+│   │   │   ├── clause.py              # Clause, RiskLevel, ClauseCategory
+│   │   │   ├── document.py            # Document, DocumentStatus, AnalysisResult
+│   │   │   └── reference.py           # ReferenceClause
+│   │   ├── routers/
+│   │   │   ├── __init__.py
+│   │   │   ├── documents.py           # POST /documents, GET /documents/{id}
+│   │   │   └── health.py              # GET /health
+│   │   ├── pipeline/                  # Analysis pipeline modules (each stage is its own file)
+│   │   │   ├── __init__.py
+│   │   │   ├── parser.py              # Stage 1: PDF/text ingestion (pdfplumber)
+│   │   │   ├── segmenter.py           # Stage 2: Clause segmentation (regex + LLM fallback)
+│   │   │   ├── rules.py               # Stage 3a: Rule-based red-flag keyword detection
+│   │   │   ├── retriever.py           # Stage 3b: Vector similarity retrieval (pgvector)
+│   │   │   ├── reasoner.py            # Stage 4: Gemini LLM reasoning (batched)
+│   │   │   └── scorer.py              # Stage 5: Aggregation & document-level scoring
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── gemini.py              # Gemini API client (embeddings + generation)
+│   │   │   └── db.py                  # Supabase/Postgres connection + queries
+│   │   └── prompts/                   # Versioned prompt templates (not hardcoded)
+│   │       ├── segmentation_v1.txt
+│   │       └── risk_reasoning_v1.txt
+│   ├── corpus/                        # Reference clause data
+│   │   ├── reference_clauses.csv      # Raw labeled clauses (git-tracked, versioned)
+│   │   └── seed_corpus.py             # Script to embed + load corpus into Postgres
+│   └── tests/
+│       └── ...
+│
+├── reference_discussion               # Original architecture discussion notes
+└── .gitignore
+```
+
+---
+
+## 6. System Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         USER'S BROWSER                              │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │  Vite + React 19 SPA (Claymorphic UI)                        │   │
+│  │  • LandingPage → upload / paste / select demo doc            │   │
+│  │  • AnalyzerWorkspace → clause list + detail panel            │   │
+│  │  • ReportsView → browser extension simulation                │   │
+│  │  • Types auto-generated from OpenAPI spec                    │   │
+│  └───────────────────────────┬──────────────────────────────────┘   │
+│                              │ HTTPS (fetch)                        │
+└──────────────────────────────┼──────────────────────────────────────┘
+                               │
+                               ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  FastAPI Backend (Python 3.12+)                                      │
+│  ┌─────────────────────────────────────────────────────────────────┐ │
+│  │  POST /api/documents           ← Upload file or raw text       │ │
+│  │  GET  /api/documents/{id}      ← Poll for analysis result      │ │
+│  │  GET  /api/documents/{id}/pdf  ← Export PDF report              │ │
+│  │  GET  /health                  ← Keep-alive for Render          │ │
+│  │  GET  /openapi.json            ← Auto-generated type contract  │ │
+│  └─────────────────────────┬───────────────────────────────────────┘ │
+│                            │                                         │
+│  ┌─────────────────────────▼───────────────────────────────────────┐ │
+│  │  ANALYSIS PIPELINE (runs sequentially per document)             │ │
+│  │                                                                 │ │
+│  │  Stage 1: parser.py      → Extract text + structure from PDF    │ │
+│  │  Stage 2: segmenter.py   → Split into clauses (regex + LLM)    │ │
+│  │  Stage 3a: rules.py      → Keyword red-flag scan (parallel)    │ │
+│  │  Stage 3b: retriever.py  → pgvector top-k retrieval (parallel) │ │
+│  │  Stage 4: reasoner.py    → Gemini Flash batched reasoning      │ │
+│  │  Stage 5: scorer.py      → Aggregate → document health score   │ │
+│  └─────────────────────────────────────────────────────────────────┘ │
+│                            │                                         │
+│  ┌─────────────────────────▼───────────────────────────────────────┐ │
+│  │  EXTERNAL SERVICES                                              │ │
+│  │  • Gemini 2.0 Flash API (reasoning + segmentation fallback)     │ │
+│  │  • Gemini text-embedding-004 (clause + corpus embeddings)       │ │
+│  │  • Supabase Postgres + pgvector (storage + vector search)       │ │
+│  └─────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Architectural Decisions
+
+1. **Synchronous pipeline, async endpoint.** The frontend calls `POST /api/documents` which returns a `documentId` and status `"processing"` immediately. The frontend then polls `GET /api/documents/{id}` until status is `"done"` or `"error"`. This avoids WebSocket complexity while keeping the user informed.
+2. **No separate job queue.** At zero-budget scale (single user at a time), the pipeline runs in a FastAPI background task (`BackgroundTasks`). No Redis, no Celery, no BullMQ.
+3. **Each pipeline stage is its own Python module** with typed input/output. Stages are composed in a single orchestrator function. Stages are independently testable.
+4. **Prompts are versioned text files** in `backend/app/prompts/`, not hardcoded strings. This allows iteration without touching Python code.
+
+---
+
+## 7. Backend Pipeline (6 Stages)
+
+### Stage 1: Ingestion & Parsing (`parser.py`)
+
+**Input:** Raw file bytes (PDF, DOCX, TXT) or raw pasted text string.
+**Output:** `ParsedDocument` — clean text + structural metadata.
+
+| File Type | Parser | Notes |
+|-----------|--------|-------|
+| PDF | `pdfplumber` | Extracts text preserving page numbers. Detects font sizes to identify headers vs. body. |
+| DOCX | `python-docx` | Extracts paragraphs with heading level metadata. |
+| TXT / Pasted text | Direct passthrough | Treat as raw unstructured text. |
+
+**Output structure:**
+```python
+class ParsedDocument(CamelModel):
+    raw_text: str                   # Full extracted text
+    pages: list[PageContent]        # Per-page text (for PDF page numbers)
+    sections: list[SectionNode]     # Detected structure tree (headers → subsections)
+```
+
+### Stage 2: Clause Segmentation (`segmenter.py`)
+
+**Input:** `ParsedDocument`
+**Output:** `list[ExtractedClause]`
+
+**Strategy (3-tier fallback):**
+
+1. **Regex-first:** Match numbered/lettered clause patterns:
+   - `\d+\.\d+` (e.g., "5.2")
+   - `Section \d+`, `Article \d+`, `§ \d+`
+   - ALL CAPS headers followed by body text
+   - Legal markers: "WHEREAS", "NOW THEREFORE", "IN WITNESS WHEREOF"
+
+2. **LLM fallback for unstructured sections:** If a section has no regex matches (e.g., a wall-of-text ToS with no numbering), send it to Gemini Flash with a prompt asking for clause boundary detection. Use **sliding window** (3000 tokens with 500-token overlap) for long sections to stay within context limits. Request structured JSON output.
+
+3. **Paragraph fallback:** If LLM segmentation returns low-confidence results or fails (rate limit, timeout), fall back to treating each paragraph (`\n\n` split) as a clause.
+
+**Output structure:**
+```python
+class ExtractedClause(CamelModel):
+    clause_id: str              # Generated UUID
+    text: str                   # The clause text, verbatim
+    section_path: str           # e.g., "5.2" or "Section 3 > Subsection A"
+    order_index: int            # Position in document
+    char_offset_start: int      # For precise document-position highlighting
+    char_offset_end: int
+```
+
+### Stage 3a: Rule-Based Red-Flag Detection (`rules.py`)
+
+**Input:** `list[ExtractedClause]`
+**Output:** `dict[clause_id, list[RuleFlag]]`
+
+Runs **in parallel** with Stage 3b. Pure regex/keyword detection. Deterministic. Auditable. Catches things embedding similarity might miss.
+
+**Red-flag patterns (initial set):**
+
+| Category | Pattern | Match Type |
+|----------|---------|-----------|
+| Forced Arbitration | `binding arbitration`, `waive.*jury`, `class action waiver` | case-insensitive regex |
+| Auto-Renewal | `auto.?renew`, `automatically renew`, `renewal term` | case-insensitive regex |
+| Unilateral Power | `sole discretion`, `without notice`, `at any time.*without`, `right to modify.*without` | case-insensitive regex |
+| Data Selling | `sell.*data`, `share.*third.?party`, `data broker`, `monetize.*user` | case-insensitive regex |
+| Liability Evasion | `under no circumstances.*liable`, `maximum.*aggregate.*liability.*\$\d+`, `waive.*right` | case-insensitive regex |
+| Excessive Penalties | `per day.*late`, `daily.*penalty`, `\d+%.*per.*day` | case-insensitive regex |
+| Entry/Access | `without.*notice.*enter`, `at any hour`, `any time.*premises` | case-insensitive regex |
+
+**Output structure:**
+```python
+class RuleFlag(CamelModel):
+    rule_name: str          # e.g., "forced_arbitration"
+    matched_text: str       # The exact substring that matched
+    severity: str           # "warning" or "critical"
+```
+
+### Stage 3b: Vector Similarity Retrieval (`retriever.py`)
+
+**Input:** `list[ExtractedClause]`
+**Output:** `dict[clause_id, list[RetrievedReference]]`
+
+Runs **in parallel** with Stage 3a.
+
+1. Embed each clause using `Gemini text-embedding-004` (768 dimensions).
+2. For each clause embedding, query `pgvector` for top-5 most similar reference clauses using cosine distance (`<=>` operator).
+3. Apply a **similarity threshold** (e.g., cosine distance ≤ 0.45). If no reference clause is above threshold, mark the clause as `"unable_to_assess"`.
+
+**Output structure:**
+```python
+class RetrievedReference(CamelModel):
+    reference_id: str
+    reference_text: str
+    category: str
+    risk_label: str             # "standard" | "cautionary" | "risky"
+    explanation: str
+    similarity_score: float     # 0.0 to 1.0 (cosine similarity)
+```
+
+### Stage 4: LLM Reasoning (`reasoner.py`)
+
+**Input per batch:**
+- 5–8 clauses (batched to survive Gemini free-tier rate limits)
+- Their retrieved reference clauses from Stage 3b
+- Their rule-flag hits from Stage 3a
+
+**Output:** `list[ClauseAnalysis]`
+
+**Gemini call specification:**
+- Model: `gemini-2.0-flash`
+- Output: Structured JSON via `response_schema` (Gemini's native structured output, not free text parsing)
+- Temperature: `0.2` (low creativity, high consistency)
+- Prompt template: loaded from `prompts/risk_reasoning_v1.txt`
+
+**What the prompt asks Gemini to do for each clause:**
+1. Classify the clause into one of the 9 categories.
+2. Compare it against the provided reference clauses.
+3. Assign a risk level: `standard` / `cautionary` / `risky` — with reasoning.
+4. Generate a plain-language rewrite that a non-lawyer would understand.
+5. Cite which reference clause(s) it deviates from and how.
+6. Assign a confidence score (0.0–1.0).
+
+**Output structure (per clause):**
+```python
+class RiskLevel(str, Enum):
+    STANDARD = "standard"
+    CAUTIONARY = "cautionary"
+    RISKY = "risky"
+
+class ClauseAnalysis(CamelModel):
+    clause_id: str
+    category: ClauseCategory           # One of the 9 categories
+    risk_level: RiskLevel
+    confidence: float                  # 0.0 to 1.0
+    reasoning: str                     # Why this risk level was assigned
+    plain_language: str                # Plain-English rewrite
+    compared_reference_ids: list[str]  # Which reference clauses were compared
+    section_location: str              # Where in the document this clause appears
+```
+
+**Rate limit strategy:**
+- Batch 5–8 clauses per Gemini call.
+- Implement exponential backoff with jitter on 429 (rate limit) errors.
+- A 50-clause document = ~7–10 Gemini calls = ~30–60 seconds processing time.
+
+### Stage 5: Aggregation & Scoring (`scorer.py`)
+
+**Input:** All `ClauseAnalysis` results for a document.
+**Output:** `DocumentAnalysisResult`
+
+**Scoring algorithm:**
+1. Each clause gets a risk weight based on its `risk_level`:
+   - `standard` = 0, `cautionary` = 1, `risky` = 3
+2. Each clause category has a severity multiplier:
+   - `arbitration_dispute_resolution` = 2.0
+   - `data_collection_sharing` = 2.0
+   - `liability_limitation` = 1.5
+   - `auto_renewal` = 1.5
+   - `unilateral_modification` = 1.5
+   - `termination_conditions` = 1.0
+   - `fee_structures_penalties` = 1.0
+   - `governing_law_venue` = 0.8
+   - `privacy_consent_mechanisms` = 2.0
+3. Document health score = `100 - (weighted_risk_sum / max_possible_risk * 100)`, clamped to 0–100.
+
+**Output structure:**
+```python
+class DocumentAnalysisResult(CamelModel):
+    document_id: str
+    status: DocumentStatus                  # "processing" | "done" | "error"
+    filename: str
+    document_type: str                      # "tos" | "lease" | "nda" | "custom"
+    upload_date: str
+    health_score: int                       # 0–100
+    summary: str                            # Executive summary (top risks, category breakdown)
+    clauses: list[AnalyzedClause]           # Full clause list with analysis
+    top_risks: list[AnalyzedClause]         # Top 5 riskiest clauses
+    category_breakdown: dict[str, int]      # Count per category
+    processing_time_seconds: float | None   # How long the pipeline took
+    disclaimer: str                         # "This is not legal advice..."
+```
+
+---
+
+## 8. Data Models (Pydantic — Single Source of Truth)
+
+> [!IMPORTANT]
+> These Pydantic models are the ONLY place types are defined. The frontend types are auto-generated from these via OpenAPI.
+
+### Enums
+
+```python
+class RiskLevel(str, Enum):
+    STANDARD = "standard"
+    CAUTIONARY = "cautionary"
+    RISKY = "risky"
+
+class DocumentStatus(str, Enum):
+    PROCESSING = "processing"
+    DONE = "done"
+    ERROR = "error"
+
+class ClauseCategory(str, Enum):
+    AUTO_RENEWAL = "auto_renewal"
+    ARBITRATION_DISPUTE_RESOLUTION = "arbitration_dispute_resolution"
+    UNILATERAL_MODIFICATION = "unilateral_modification"
+    LIABILITY_LIMITATION = "liability_limitation"
+    DATA_COLLECTION_SHARING = "data_collection_sharing"
+    TERMINATION_CONDITIONS = "termination_conditions"
+    FEE_STRUCTURES_PENALTIES = "fee_structures_penalties"
+    GOVERNING_LAW_VENUE = "governing_law_venue"
+    PRIVACY_CONSENT_MECHANISMS = "privacy_consent_mechanisms"
+```
+
+### Core Models
+
+```python
+class AnalyzedClause(CamelModel):
+    id: str
+    title: str                          # Short human-readable title
+    category: ClauseCategory
+    risk_level: RiskLevel
+    confidence: float
+    original_text: str                  # Verbatim legal text
+    simplified_text: str                # Plain-language rewrite
+    explanation: str                    # Why this matters
+    rag_comparison: str                 # How it deviates from standard
+    compared_reference_ids: list[str]
+    section_location: str
+    rule_flags: list[str]               # Deterministic flags that triggered
+
+class DocumentAnalysisResult(CamelModel):
+    id: str
+    status: DocumentStatus
+    filename: str
+    document_type: str
+    upload_date: str
+    health_score: int
+    summary: str
+    clauses: list[AnalyzedClause]
+    top_risks: list[AnalyzedClause]
+    category_breakdown: dict[str, int]
+    processing_time_seconds: float | None
+    disclaimer: str
+```
+
+### How These Map to the Existing Frontend
+
+The existing frontend uses these interfaces in [mockData.ts](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/mockData.ts):
+
+```typescript
+// CURRENT (manually defined — will be DELETED)
+interface Clause {
+  id: string;
+  title: string;
+  category: string;
+  riskLevel: 'low' | 'medium' | 'high';    // ← maps to RiskLevel enum
+  originalText: string;
+  simplifiedText: string;
+  explanation: string;
+  ragComparison: string;
+}
+
+interface Document {
+  id: string;
+  title: string;
+  type: 'tos' | 'lease' | 'custom';
+  uploadDate: string;
+  healthScore: number;
+  summary: string;
+  clauses: Clause[];
+}
+```
+
+The Pydantic `AnalyzedClause` and `DocumentAnalysisResult` models are designed to be **a strict superset** of what the frontend already consumes. The existing frontend rendering code will work with the new API response shape with minimal changes — primarily:
+- `riskLevel` values change from `"low"/"medium"/"high"` → `"standard"/"cautionary"/"risky"`. The frontend mapping helper (`getRiskBadgeColor`, `getRiskIcon`) needs a trivial update.
+- New fields are added (`confidence`, `comparedReferenceIds`, `ruleFlags`, `processingTimeSeconds`) which the frontend can progressively adopt.
+
+---
+
+## 9. Database Schema (Postgres + pgvector)
+
+**Host:** Supabase (free tier)
+**Extension:** `pgvector` (enabled via Supabase dashboard or `CREATE EXTENSION vector;`)
+
+```sql
+-- Enable pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- ============================================================
+-- REFERENCE CORPUS (seeded once, versioned, grows over time)
+-- ============================================================
+CREATE TABLE reference_clauses (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    text            TEXT NOT NULL,
+    category        TEXT NOT NULL,           -- ClauseCategory enum value
+    risk_label      TEXT NOT NULL,           -- "standard" | "cautionary" | "risky"
+    explanation     TEXT NOT NULL,           -- Why this label
+    source          TEXT NOT NULL,           -- e.g., "Spotify ToS 2024"
+    embedding       vector(768) NOT NULL,   -- Gemini text-embedding-004 output
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for fast vector similarity search
+CREATE INDEX ON reference_clauses
+    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 20);
+
+-- ============================================================
+-- USER-UPLOADED DOCUMENTS
+-- ============================================================
+CREATE TABLE documents (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    filename        TEXT NOT NULL,
+    raw_text        TEXT NOT NULL,
+    document_type   TEXT DEFAULT 'custom',       -- "tos" | "lease" | "nda" | "custom"
+    status          TEXT DEFAULT 'processing',   -- "processing" | "done" | "error"
+    health_score    INT,
+    summary         TEXT,
+    error_message   TEXT,
+    processing_time_seconds FLOAT,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- EXTRACTED CLAUSES (from user documents)
+-- ============================================================
+CREATE TABLE clauses (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    doc_id          UUID REFERENCES documents(id) ON DELETE CASCADE,
+    text            TEXT NOT NULL,
+    section_path    TEXT,
+    order_index     INT NOT NULL,
+    char_offset_start INT,
+    char_offset_end   INT,
+    embedding       vector(768)               -- Clause embedding for retrieval
+);
+
+-- ============================================================
+-- RISK FLAGS (analysis output per clause)
+-- ============================================================
+CREATE TABLE risk_flags (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    clause_id       UUID REFERENCES clauses(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    risk_level      TEXT NOT NULL,
+    confidence      FLOAT NOT NULL,
+    reasoning       TEXT NOT NULL,
+    plain_language  TEXT NOT NULL,
+    rag_comparison  TEXT NOT NULL,
+    rule_flags      TEXT[] DEFAULT '{}',
+    compared_reference_ids UUID[] DEFAULT '{}',
+    section_location TEXT
+);
+```
+
+---
+
+## 10. API Contract (FastAPI Endpoints)
+
+### `POST /api/documents`
+
+Upload a document for analysis. Accepts either a file upload or raw text.
+
+**Request:** `multipart/form-data`
+- `file` (optional): PDF, DOCX, or TXT file (max 10 MB)
+- `raw_text` (optional): Pasted text string
+- Must provide exactly one of `file` or `raw_text`.
+
+**Response:** `202 Accepted`
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "processing",
+  "filename": "rental_agreement.pdf",
+  "message": "Document accepted for analysis."
+}
+```
+
+**Backend behavior:** Validates input, saves document to `documents` table with `status = "processing"`, kicks off the analysis pipeline in a `BackgroundTasks` coroutine, returns immediately.
+
+---
+
+### `GET /api/documents/{document_id}`
+
+Poll for analysis results.
+
+**Response (while processing):** `200 OK`
+```json
+{
+  "id": "550e8400-...",
+  "status": "processing",
+  "filename": "rental_agreement.pdf"
+}
+```
+
+**Response (when done):** `200 OK`
+Full `DocumentAnalysisResult` payload (see Data Models section).
+
+**Response (on error):** `200 OK`
+```json
+{
+  "id": "550e8400-...",
+  "status": "error",
+  "filename": "rental_agreement.pdf",
+  "errorMessage": "Gemini API rate limit exceeded. Please try again in 60 seconds."
+}
+```
+
+---
+
+### `GET /api/demo-documents`
+
+Returns pre-analyzed demo documents (cached, no pipeline execution).
+
+**Response:** `200 OK`
+```json
+[
+  { /* full DocumentAnalysisResult for "Acme Cloud ToS" */ },
+  { /* full DocumentAnalysisResult for "Cozy Haven Lease" */ }
+]
+```
+
+---
+
+### `GET /health`
+
+Keep-alive endpoint for Render / UptimeRobot.
+
+**Response:** `200 OK`
+```json
+{ "status": "healthy", "timestamp": "2026-08-06T00:00:00Z" }
+```
+
+---
+
+## 11. Reference Corpus Specification
+
+### Target: 400+ labeled clauses across 9 categories
+
+| Category | Target Count | Sources |
+|----------|-------------|---------|
+| Auto-renewal / subscription terms | ~45 | SaaS ToS (Spotify, Adobe, Netflix), FTC enforcement actions |
+| Arbitration / dispute resolution / jury waiver | ~45 | Big tech ToS, consumer advocacy reports |
+| Unilateral modification rights | ~45 | ToS;DR tagged clauses, social media ToS |
+| Liability limitation / indemnification | ~45 | SaaS vendor agreements, freelancer contracts |
+| Data collection / sharing / sale | ~45 | Privacy policies, data broker ToS, FTC actions |
+| Termination conditions | ~45 | SaaS and employment agreements |
+| Fee structures / hidden penalties | ~45 | Rental leases, SaaS billing terms |
+| Governing law / venue | ~40 | Cross-jurisdictional agreements |
+| Privacy / consent mechanisms | ~45 | GDPR-facing privacy policies, cookie policies |
+
+### Risk Label Distribution (per category)
+
+- ~40% `standard` — fair, balanced, industry-normal
+- ~35% `cautionary` — legal but user-unfriendly
+- ~25% `risky` — heavily one-sided, minimal notice, waives significant rights
+
+### CSV Format (git-tracked)
+
+```csv
+text,category,risk_label,explanation,source
+"Your subscription renews automatically at the end of each billing period. You may cancel at any time before the renewal date.",auto_renewal,standard,"Standard auto-renewal with unrestricted cancellation.",Spotify ToS 2024
+```
+
+### Corpus Build Strategy
+
+1. Collect 15–20 real public documents (mix of big-company ToS, aggressive small-app ToS, HUD rental templates, FTC enforcement examples).
+2. Run each through the Stage 2 segmenter to auto-split into candidate clauses.
+3. Manually review and label each clause: `category`, `risk_label`, `explanation`, `source`.
+4. Optionally use Gemini Flash to pre-label, then human-review. This is 10x faster than labeling from scratch.
+5. Store as CSV, git-commit, then bulk-load into Postgres via `seed_corpus.py`.
+
+---
+
+## 12. Rule-Based Red-Flag Layer
+
+Defined in `backend/app/pipeline/rules.py`. This is a flat list of compiled regex patterns that run against every clause. It is:
+
+- **Deterministic:** Same input always produces the same flags.
+- **Auditable:** Every flag has a `rule_name` and `matched_text`.
+- **Independent of the LLM:** Works even if Gemini is down or rate-limited.
+- **A safety net:** Catches patterns that embedding similarity might miss.
+
+The patterns are defined in Section 7 Stage 3a above. They are loaded from a config dict (not hardcoded in the regex calls) so they can be extended without modifying pipeline logic.
+
+---
+
+## 13. Gemini Integration Specification
+
+### SDK
+
+```
+google-genai  (the official Google Gen AI Python SDK)
+```
+
+### Models Used
+
+| Use Case | Model | Why |
+|----------|-------|-----|
+| Clause segmentation fallback | `gemini-2.0-flash` | Cheap, fast, good enough for boundary detection |
+| Risk reasoning (Stage 4) | `gemini-2.0-flash` | Free tier, structured output support, sufficient reasoning quality |
+| Clause embedding | `text-embedding-004` | Free, 768-dim, good semantic similarity |
+
+### Structured Output Enforcement
+
+All Gemini generation calls MUST use `response_schema` (Gemini's native JSON schema enforcement). Never parse free text.
+
+```python
+from google import genai
+
+client = genai.Client(api_key=settings.gemini_api_key)
+
+response = client.models.generate_content(
+    model="gemini-2.0-flash",
+    contents=prompt,
+    config=genai.types.GenerateContentConfig(
+        response_mime_type="application/json",
+        response_schema=ClauseAnalysisBatchResponse,  # Pydantic model
+        temperature=0.2,
+    ),
+)
+```
+
+### Rate Limit Handling
+
+- Gemini free tier: ~15 RPM for Flash, ~1500 RPD.
+- Implement exponential backoff: initial delay 2s, max delay 60s, jitter ±500ms.
+- On persistent 429, set document `status = "error"` with a user-friendly message.
+- Batch 5–8 clauses per call to minimize request count.
+
+---
+
+## 14. Frontend Architecture (Existing)
+
+> [!NOTE]
+> The frontend is already built and functional with mock data. This section documents what exists for backend developers to understand the integration surface.
+
+### File Inventory
+
+| File | Purpose | Lines |
+|------|---------|-------|
+| [App.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/App.tsx) | Root component. State-based view router (`landing` / `analyzer` / `reports`). Global nav bar. | 109 |
+| [LandingPage.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/LandingPage.tsx) | Marketing landing page. Hero, feature bento grid, demo doc cards, footer CTA. | 341 |
+| [AnalyzerWorkspace.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/AnalyzerWorkspace.tsx) | Core workspace. File upload (drag/drop + paste), processing animation, clause sidebar list, side-by-side detail pane. Currently uses mock data and simulated processing delays. | 630 |
+| [ReportsView.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/ReportsView.tsx) | Browser extension simulation. Tabbed policy viewer (Privacy, ToS, Cookie, EULA) with mock site data. | 505 |
+| [ClayButton.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/ClayButton.tsx) | Reusable claymorphic button component (primary/secondary variants). | 56 |
+| [ClayCard.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/ClayCard.tsx) | Reusable claymorphic card component (default/low/medium/high risk variants). | 51 |
+| [mockData.ts](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/mockData.ts) | Mock documents and clauses. TO BE REPLACED with live API calls. | 124 |
+| [i18n.ts](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/i18n.ts) | Internationalization string map (English only currently). | 110 |
+| [index.css](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/index.css) | Tailwind theme tokens + claymorphic utility classes (clay-card, clay-btn, clay-input). | 166 |
+
+### Current Flow (Mock)
+
+1. User lands on `LandingPage`. Clicks "Analyze Your Agreement" → view switches to `analyzer`.
+2. In `AnalyzerWorkspace`:
+   - **No document loaded:** Shows upload zone (drag/drop), paste text area, and pre-built demo doc cards.
+   - **Upload/paste:** Triggers `processUploadedFile()` which runs a fake 4-step timer (25% increments over 2 seconds) and then loads a hardcoded mock `Document`.
+   - **Demo card click:** Loads a mock document from `mockDocuments` array directly.
+3. Once a document is loaded: left sidebar shows health score dial + filterable clause list. Right pane shows selected clause detail: original text, simplified text, risk explanation, and RAG comparison.
+
+---
+
+## 15. Frontend ↔ Backend Integration Changes
+
+### What Changes
+
+| Current State | Target State |
+|---------------|-------------|
+| `mockData.ts` defines `Document` and `Clause` types manually | Types auto-generated from OpenAPI into `src/api/types.ts` |
+| `processUploadedFile()` fakes a timer and returns hardcoded data | Calls `POST /api/documents` with the actual file, then polls `GET /api/documents/{id}` |
+| Demo docs loaded from hardcoded `mockDocuments` array | Demo docs fetched from `GET /api/demo-documents` (pre-analyzed, cached on backend) |
+| Risk levels are `"low"` / `"medium"` / `"high"` | Risk levels are `"standard"` / `"cautionary"` / `"risky"` — update helper functions |
+| No error states | Handle `status: "error"` responses, show user-friendly error messages |
+
+### New Frontend Files
+
+1. **`src/api/types.ts`** — Auto-generated by `openapi-typescript`. Never edit.
+2. **`src/api/client.ts`** — Fetch wrapper:
+   ```typescript
+   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+   export async function uploadDocument(file: File): Promise<{ id: string }> { ... }
+   export async function uploadText(text: string): Promise<{ id: string }> { ... }
+   export async function getDocument(id: string): Promise<DocumentAnalysisResult> { ... }
+   export async function getDemoDocuments(): Promise<DocumentAnalysisResult[]> { ... }
+   ```
+3. **`src/hooks/useDocumentAnalysis.ts`** — Custom hook that manages upload → poll → result lifecycle with loading/error states.
+
+### Polling Strategy
+
+```typescript
+// Poll every 2 seconds until status !== "processing"
+const poll = async (docId: string) => {
+  const result = await getDocument(docId);
+  if (result.status === 'processing') {
+    setTimeout(() => poll(docId), 2000);
+  } else {
+    setDocument(result);
+  }
+};
+```
+
+---
+
+## 16. Deployment & Hosting
+
+| Service | Host | Tier | URL Pattern |
+|---------|------|------|-------------|
+| Frontend (Vite SPA) | **Vercel** | Free | `clarifylaw.vercel.app` |
+| Backend (FastAPI) | **Render** | Free | `clarifylaw-api.onrender.com` |
+| Database (Postgres + pgvector) | **Supabase** | Free | Direct connection string |
+| Keep-alive | **UptimeRobot** | Free | Pings `GET /health` every 14 min |
+
+### Render Configuration
+
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Environment Variables:**
+  - `GEMINI_API_KEY` — Google AI Studio API key
+  - `SUPABASE_URL` — Supabase project URL
+  - `SUPABASE_KEY` — Supabase anon/service key
+  - `DATABASE_URL` — Postgres connection string (from Supabase)
+  - `CORS_ORIGINS` — Frontend URL for CORS whitelist
+
+### CORS Configuration (FastAPI)
+
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.cors_origins],  # e.g., "https://clarifylaw.vercel.app"
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+---
+
+## 17. Non-Functional Requirements
+
+### Legal Disclaimer
+
+Every API response that contains analysis results MUST include:
+```
+"disclaimer": "This analysis is for informational purposes only and does not constitute legal advice. Always consult a qualified attorney before making legal decisions based on contract analysis."
+```
+
+### Confidence Transparency
+
+Every clause card in the UI shows:
+- The confidence score (0.0–1.0) as a visual indicator.
+- If confidence < 0.5 or no reference match found: display `"Unable to assess — no close standard match found"` instead of forcing a risk label.
+
+### Audit Trail
+
+For every risk flag generated, the system stores:
+- Which reference clauses were retrieved and compared (`compared_reference_ids`).
+- Which rule-based patterns triggered (`rule_flags`).
+- The model's reasoning text.
+
+This ensures every flag is explainable and traceable.
+
+### Performance Targets
+
+| Metric | Target |
+|--------|--------|
+| Time to first byte (health endpoint) | < 200ms |
+| Full document analysis (30 clauses) | < 90 seconds |
+| Full document analysis (50 clauses) | < 150 seconds |
+| Frontend initial load (Lighthouse) | > 90 performance score |
+
+### Security
+
+- File uploads validated: max 10 MB, allowed extensions only (`.pdf`, `.docx`, `.doc`, `.txt`).
+- Raw text input: max 500,000 characters.
+- No user authentication for v1 (anonymous usage). Auth only required for future saved-reports feature.
+- Documents are NOT automatically deleted in v1 but the privacy policy should state retention period.
+
+---
+
+## 18. Phased Execution Plan
+
+### Phase 1: Backend Foundation (Week 1–2)
+
+- [ ] Initialize `backend/` directory with FastAPI project structure
+- [ ] Set up Python virtual environment + dependencies (`pyproject.toml`)
+- [ ] Create `CamelModel` base class with `alias_generator`
+- [ ] Define all Pydantic models (enums, `AnalyzedClause`, `DocumentAnalysisResult`)
+- [ ] Set up Supabase Postgres + enable `pgvector` + create schema tables
+- [ ] Build `POST /api/documents` and `GET /api/documents/{id}` endpoints (stub responses)
+- [ ] Build `GET /health` endpoint
+- [ ] Configure CORS for local development
+- [ ] **Gate:** FastAPI server starts, OpenAPI spec at `/openapi.json` matches expected schema
+
+### Phase 2: Reference Corpus (Week 2–3)
+
+- [ ] Collect 400+ real clauses from public sources
+- [ ] Label each with category, risk_label, explanation, source
+- [ ] Create `reference_clauses.csv` (git-tracked)
+- [ ] Build `seed_corpus.py` to embed clauses via Gemini + bulk-insert into Postgres
+- [ ] Verify vector search works: manual test queries returning relevant matches
+- [ ] **Gate:** Can query pgvector with a sample clause and get back relevant reference matches
+
+### Phase 3: Analysis Pipeline (Week 3–5)
+
+- [ ] Implement Stage 1: `parser.py` (pdfplumber + python-docx + plain text)
+- [ ] Implement Stage 2: `segmenter.py` (regex + Gemini fallback + paragraph fallback)
+- [ ] Implement Stage 3a: `rules.py` (red-flag keyword patterns)
+- [ ] Implement Stage 3b: `retriever.py` (embed clause → pgvector cosine search)
+- [ ] Implement Stage 4: `reasoner.py` (Gemini batched reasoning with structured output)
+- [ ] Implement Stage 5: `scorer.py` (aggregation + health score calculation)
+- [ ] Wire all stages into the orchestrator function
+- [ ] Create versioned prompt templates in `prompts/`
+- [ ] Implement rate-limit handling (exponential backoff)
+- [ ] Test with 10 real documents, verify risk flags match expectations
+- [ ] **Gate:** Upload a PDF → get a complete, accurate risk report back
+
+### Phase 4: Frontend Integration (Week 5–6)
+
+- [ ] Install `openapi-typescript` in frontend
+- [ ] Add `generate-types` / `predev` / `prebuild` scripts to `package.json`
+- [ ] Generate TypeScript types from backend OpenAPI spec
+- [ ] Create `src/api/client.ts` fetch wrapper
+- [ ] Create `src/hooks/useDocumentAnalysis.ts` polling hook
+- [ ] Replace `processUploadedFile()` mock with real API calls
+- [ ] Update risk level mapping (`standard/cautionary/risky` → colors/icons)
+- [ ] Add confidence display to clause detail panel
+- [ ] Add real error states and retry UI
+- [ ] Pre-analyze 2–3 demo documents, serve from `GET /api/demo-documents`
+- [ ] **Gate:** End-to-end: upload PDF in browser → see real analyzed results
+
+### Phase 5: Deploy & Polish (Week 6–7)
+
+- [ ] Deploy backend to Render (free tier)
+- [ ] Deploy frontend to Vercel
+- [ ] Set up UptimeRobot keep-alive ping
+- [ ] Set up environment variables on Render
+- [ ] Build evaluation set (20+ labeled documents with ground-truth risk flags)
+- [ ] Run eval suite, measure precision/recall
+- [ ] Add loading states with real progress messages ("Analyzing clause 12 of 47...")
+- [ ] Error handling edge cases (empty documents, non-English text, scanned PDFs)
+- [ ] **Gate:** A non-technical person can use the deployed app end-to-end
+
+> [!IMPORTANT]
+> **Open Questions (answers needed before Phase 1 starts):**
+>
+> 1. **Do you have a Gemini API key from Google AI Studio?** We need this before any pipeline work.
+> 2. **Do you have a Supabase account set up?** We need the Postgres connection string.
+> 3. **Python version on your machine?** We need 3.12+ for modern syntax.
+> 4. **Should the ReportsView (browser extension simulation) connect to the real backend too, or stay as a mock-only demo?** It's currently a separate feature with its own data model.

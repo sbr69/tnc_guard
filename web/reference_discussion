@@ -1,0 +1,304 @@
+PS: Legal/Policy Document Simplifier with Clause-Level Risk Flagging:
+Upload terms of service or rental agreements; the tool doesn't just summarize but flags specific clauses as "unusual" or "risky" by comparing against a reference set of standard clauses (RAG-based).
+
+System Architecture: Legal Document Risk Analyzer
+1. Core Design Principle
+
+Don't try to build "one LLM call that summarizes." You need a pipeline: parse → segment → classify → compare → score → explain. Each stage should be independently testable and swappable. This is a RAG + classification hybrid, not a pure RAG chatbot.
+
+2. Pipeline Stages
+Stage 1: Ingestion & Parsing
+Accept PDF, DOCX, plain text, HTML (for web ToS).
+Use pdfplumber/unstructured.io for PDF, mammoth or python-docx for DOCX.
+Preserve structural metadata: section headers, numbering, page numbers. You'll need this later for citing exactly where a risky clause lives.
+Output: clean text + structure tree (sections → subsections → clauses).
+Stage 2: Clause Segmentation (this is the hard part, get it right)
+
+Naive token-based chunking (e.g., 512-token sliding window) is wrong for legal docs. A clause can be one sentence or three paragraphs, and splitting mid-clause destroys meaning.
+
+Do semantic clause segmentation:
+
+First pass: rule-based split on numbered/lettered clauses (\d+\.\d+, Section X, Article X) and legal boilerplate markers ("WHEREAS", "NOW THEREFORE").
+Second pass: for unstructured docs (raw ToS pages with no numbering), use an LLM call with structured output to segment into logical clauses. Cheap model here (Haiku-class), not your main reasoning model.
+Each clause becomes a record: {clause_id, text, section_path, char_offset, doc_id}.
+
+This segmentation quality directly determines your final product quality. Budget real engineering time here, not just prompt engineering.
+
+Stage 3: Reference Corpus (the RAG backbone)
+
+This is what makes "unusual" mean something instead of being a hallucinated LLM opinion.
+
+Build a labeled reference clause database:
+
+Source standard/fair clauses from: EFF's ToS;DR dataset, public rental agreement templates from state bar associations/HUD, Creative Commons legal templates, LawInsider's public clause library (check licensing), your own manually reviewed set.
+Each reference entry: {clause_text, category (e.g., "arbitration", "auto-renewal", "liability limitation", "data sharing"), risk_label (standard/cautionary/risky), jurisdiction, source, plain_explanation}.
+Minimum viable corpus: 500-1000 labeled clauses across 15-20 categories to start. This will feel small, it's enough for MVP because you're doing similarity + LLM reasoning, not pure retrieval matching.
+Store embeddings in a vector DB alongside metadata for filtering by category/jurisdiction.
+
+Categorize clause types up front (don't skip this, it's your taxonomy backbone):
+
+Arbitration/dispute resolution
+Auto-renewal/subscription traps
+Unilateral modification rights
+Liability limitation/indemnification
+Data collection/sharing/sale
+Termination conditions
+Fee structures/penalties
+Security deposit terms (rental-specific)
+Right of entry (rental-specific)
+Governing law/venue
+Stage 4: Retrieval + Classification (hybrid, not pure RAG)
+
+For each extracted clause:
+
+Embed the clause (use a model fine-tuned or strong on legal/semantic similarity — text-embedding-3-large or a legal-domain sentence-transformer like nlpaueb/legal-bert derivatives for embeddings if you want domain specificity).
+Retrieve top-k (5-8) similar reference clauses from the vector DB, filtered by category if you've pre-classified the clause type.
+Rule-based flag layer runs in parallel — regex/keyword detectors for known red-flag patterns (e.g., "sole discretion," "without notice," "binding arbitration," "waive right to jury trial," "automatically renew"). This catches things embedding similarity might miss and gives you deterministic, auditable flags.
+LLM reasoning call with structured output: pass the clause + retrieved reference clauses + rule-flags as context. Ask the model to:
+Classify clause category
+Compare against retrieved standard clauses
+Assign risk level (standard / cautionary / risky) with reasoning
+Generate plain-language rewrite
+Cite which retrieved reference it's deviating from and how
+
+Force structured JSON output (tool use / function calling), never free text here. This is non-negotiable for a product that needs to render risk badges reliably.
+
+json
+{
+  "clause_id": "c_042",
+  "category": "auto_renewal",
+  "risk_level": "risky",
+  "confidence": 0.87,
+  "reasoning": "Clause auto-renews for full annual term with only 3-day cancellation window, vs standard 30-day window in reference set",
+  "reference_clauses_compared": ["ref_112", "ref_089"],
+  "plain_language": "This automatically renews your subscription for a full year unless you cancel within 3 days of the renewal date — most agreements give you 30 days.",
+  "section_location": "5.2"
+}
+Stage 5: Aggregation & Scoring
+Roll up clause-level risk into a document-level risk score (weighted by category severity — arbitration/data-sharing weighted higher than formatting boilerplate).
+Generate an executive summary: top 5 riskiest clauses, categories present, overall risk tier.
+3. Why Hybrid (RAG + Rules + LLM) Instead of Pure LLM
+
+Pure "ask GPT if this is risky" fails for three reasons:
+
+No grounding — model opinion drifts, inconsistent between runs, no way to explain "risky compared to what."
+No auditability — you can't show a user or regulator why something was flagged.
+Hallucination risk — LLM may invent legal claims. The rule-layer + retrieval grounding gives you a defensible, explainable flag even before the LLM reasons about it.
+
+The reference corpus is your product's actual IP. The LLM is just the reasoning glue.
+
+4. Tech Stack (concrete)
+
+Given your existing comfort with Next.js/Fastify/Postgres:
+
+Frontend: Next.js. Render document with inline highlight overlays (color-coded by risk), click-to-expand clause explanation panel.
+Backend API: Fastify, same as your other stack.
+Vector DB: pgvector on Postgres (avoid adding a separate vector DB dependency if you're already on Postgres) or Qdrant if you want dedicated ANN performance at scale.
+Document parsing service: separate worker (Python, since unstructured/pdfplumber ecosystem is stronger there) queued via BullMQ/Redis, since parsing + LLM calls are slow and shouldn't block the API.
+LLM: Claude for the classification/reasoning step (structured tool-use output). Use a cheaper model for clause segmentation, stronger model for risk reasoning.
+Embeddings: OpenAI text-embedding-3-large or Voyage AI's legal/domain embeddings (Voyage has stronger legal-doc performance in benchmarks).
+Job queue: Redis + BullMQ, since a full document (50+ clauses) means 50+ LLM calls, needs async processing with progress updates to frontend (SSE/websocket).
+5. Critical Non-Negotiables
+Disclaimer layer: every output states "not legal advice," confidence scores shown per clause, not just presented as fact.
+Confidence thresholding: if retrieval similarity is low (no good reference match) and rule-layer doesn't flag it, mark as "unable to assess" rather than forcing a risk label. Silence is safer than false confidence.
+Audit trail: store which reference clauses were retrieved and compared for every flag, so output is explainable, not a black box.
+Versioned reference corpus: clause standards evolve (e.g., FTC rules on auto-renewal changed). Version your corpus, don't hardcode it as static.
+Eval set: build 50-100 documents with human-labeled ground truth risky clauses. Track precision/recall on risk flags before shipping. This is what separates a real product from a demo.
+
+NOTE: its not for mvp or for hackahton - but for now i wanna build it for free, i have 0 budget and will use gemini
+
+Final Architecture — Legal Document Risk Analyzer (Zero-Budget Build)
+Stack Summary
+Frontend       → Next.js (Vercel free)
+Backend API    → Fastify (Render/Railway free, or local for demo)
+Database       → Postgres + pgvector (Supabase free tier)
+LLM            → Gemini 2.0 Flash (free tier)
+Embeddings     → Gemini text-embedding-004 (free)
+PDF Parsing    → pdfplumber / pdf-parse (local, no API)
+Async jobs     → In-process status polling (no Redis needed at this scale)
+End-to-End Flow
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 0 — ONE-TIME SETUP (before any user uploads anything)  │
+└─────────────────────────────────────────────────────────────┘
+  Build reference corpus (~200 labeled clauses, 8 categories)
+        │
+        ▼
+  Embed each with Gemini text-embedding-004
+        │
+        ▼
+  Store in Postgres: reference_clauses table
+  {id, text, category, risk_label, explanation, embedding vector(768)}
+
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 1 — USER UPLOADS DOCUMENT                              │
+└─────────────────────────────────────────────────────────────┘
+  PDF/text upload
+        │
+        ▼
+  Parse with pdfplumber → clean text + structure
+        │
+        ▼
+  documents table: {id, filename, raw_text, status: "processing"}
+
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 2 — CLAUSE SEGMENTATION                                │
+└─────────────────────────────────────────────────────────────┘
+  Rule-based split first:
+    regex on numbering (§, 1.1, "Section X", ALL CAPS headers)
+        │
+        ▼
+  Fallback: one Gemini Flash call for unstructured sections
+  (ask for structured JSON array of clause boundaries)
+        │
+        ▼
+  clauses table: {id, doc_id, text, section_path, order}
+
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 3 — PARALLEL DUAL-LAYER ANALYSIS (per clause)          │
+└─────────────────────────────────────────────────────────────┘
+     ┌──────────────────┐          ┌───────────────────────┐
+     │  RULE-BASED LAYER │          │   RETRIEVAL LAYER      │
+     │  regex/keyword    │          │   embed clause →       │
+     │  red-flag scan    │          │   pgvector cosine      │
+     │  ("sole discretion│          │   search → top 5-8      │
+     │  "auto-renew",    │          │   similar reference      │
+     │  "waive jury")    │          │   clauses                │
+     └────────┬──────────┘          └───────────┬───────────┘
+              │                                  │
+              └────────────┬─────────────────────┘
+                           ▼
+              Both outputs feed into Step 4
+
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 4 — LLM REASONING (batched)                             │
+└─────────────────────────────────────────────────────────────┘
+  Batch 5-8 clauses per Gemini call (stays inside free rate limit)
+
+  Input per batch:
+    - clause texts
+    - retrieved reference clauses (with risk labels)
+    - rule-flag hits
+        │
+        ▼
+  Gemini returns structured JSON per clause:
+  {
+    category, risk_level (standard/cautionary/risky),
+    confidence, reasoning, plain_language_rewrite,
+    compared_reference_ids, section_location
+  }
+        │
+        ▼
+  risk_flags table: {clause_id, category, risk_level,
+                      confidence, reasoning, plain_language,
+                      reference_ids[]}
+
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 5 — AGGREGATION                                        │
+└─────────────────────────────────────────────────────────────┘
+  Roll up all clause risk_flags →
+    - document risk score (weighted: arbitration/data-sharing
+      weighted higher than boilerplate)
+    - top 5 riskiest clauses
+    - category breakdown
+        │
+        ▼
+  documents.status = "done"
+
+
+┌─────────────────────────────────────────────────────────────┐
+│  STEP 6 — FRONTEND RENDER                                    │
+└─────────────────────────────────────────────────────────────┘
+  Document view with inline color-coded highlights
+  (green=standard, yellow=cautionary, red=risky)
+        │
+        ▼
+  Click clause → side panel shows:
+    reasoning + plain-language rewrite + what reference
+    clause it deviates from + confidence score
+        │
+        ▼
+  Top-level summary card: overall risk tier + top risks
+Schema (Postgres + pgvector)
+sql
+reference_clauses
+  id, text, category, risk_label, explanation, source, embedding vector(768)
+
+documents
+  id, filename, raw_text, status, risk_score, created_at
+
+clauses
+  id, doc_id, text, section_path, order_index
+
+risk_flags
+  id, clause_id, category, risk_level, confidence,
+  reasoning, plain_language, reference_clause_ids[]
+Key Design Rules to Keep
+Retrieval grounds every flag — no clause gets a risk label without at least one comparable reference clause pulled from pgvector. If similarity is too low, mark "unable to assess" instead of guessing.
+Rule-layer runs independently of the LLM — deterministic red-flag keywords are a safety net even if the LLM misses something or Gemini free-tier throttles a call.
+Batch everything — never call Gemini per-clause; batch 5-8 clauses/call to survive the free-tier rate limit.
+Structured output only — force JSON schema on every Gemini call (use Gemini's function calling / response schema), never parse free text.
+Confidence shown always — every clause card shows confidence + "not legal advice" disclaimer.
+
+This is what you build. Next natural step is either the reference corpus collection script or the Gemini prompt/schema for Step 4 — say which and I'll write it out.
+
+
+
+
+Build reference corpus (~200 labeled clauses, 8 categories)
+how??
+
+
+1. Sourcing (where the 200 clauses come from)
+
+Don't write these from imagination — pull real clauses from real public documents, then label them yourself. Sources that are free and legally fine to use:
+
+Source	What you get
+ToS;DR (Terms of Service Didn't Read)	Community-labeled clauses already tagged good/bad for major platforms — huge head start, some can be directly reused with attribution
+Google, Reddit, Spotify, GitHub, Discord ToS (public)	Real "standard" clauses — big companies' legal teams write fairly balanced ToS, good baseline for "standard" label
+Sketchy/aggressive apps' ToS (smaller SaaS, data-broker apps)	Good source of "risky" examples — auto-renewal traps, broad data-sharing, forced arbitration
+HUD.gov / state bar association rental lease templates	Standard rental clauses (security deposit, entry notice, etc.)
+LawInsider.com public clause library	Searchable by clause type, free tier lets you browse real contract language
+FTC.gov enforcement actions / blog	Literally lists real risky clauses regulators flagged — great ground truth for "risky" label with citation
+
+You don't write fake legal text. You collect real clauses and label them.
+
+2. The 8 categories (lock these first)
+Auto-renewal / subscription terms
+Arbitration / dispute resolution / jury waiver
+Unilateral modification rights ("we may change these terms at any time")
+Liability limitation / indemnification
+Data collection / sharing / sale
+Termination conditions
+Fee structures / hidden penalties
+Governing law / venue
+3. Labeling process (manual, ~2-3 hrs of focused work)
+
+For each clause you collect, fill this row:
+
+text: <the actual clause, verbatim>
+category: <one of the 8>
+risk_label: standard | cautionary | risky
+explanation: <1-2 sentences on WHY this label>
+source: <e.g. "Spotify ToS 2024" or "FTC enforcement action re: Adobe">
+
+Rule of thumb for labeling:
+
+standard — gives user reasonable notice, mutual terms, industry-normal (e.g. 30-day auto-renewal notice)
+cautionary — legal but user-unfriendly, worth flagging (e.g. 14-day notice, binding arbitration but with opt-out window)
+risky — heavily one-sided, minimal notice, waives significant rights (e.g. "sole discretion," 3-day cancellation window, no opt-out arbitration)
+
+Aim for roughly 25 clauses per category (8 × 25 = 200), a rough mix of ~40% standard / 35% cautionary / 25% risky so your reference set isn't just a "risky clause" list — you need real "this is fine" examples too, or every match will look bad by comparison.
+
+4. Practical collection method
+
+Fastest way to hit 200 without dying of manual copy-paste:
+
+Pick 15-20 real documents (mix of big-company ToS + smaller/sketchier ones + rental templates).
+Run each through your Step 2 clause segmentation (the thing you're already building) to auto-split into candidate clauses.
+You manually review the segmented output and just assign category + risk_label + explanation to each — you're not writing clauses, just labeling ones already extracted. This also doubles as testing your segmentation logic on real documents.
+Store as CSV first, then bulk-load into Postgres once ready.

@@ -1,0 +1,49 @@
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+build/
+.vite/
+.cache/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.venv/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor folders
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Misc
+.history/
+.sourcemaps
+*.tmp
+
+# Docs and notes
+docs/
+*.md
+*.txt
