@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@theme {
+:root {
   --font-sans: "Outfit", sans-serif;
   --font-mono: "Geist Mono", "SF Mono", monospace;
   
