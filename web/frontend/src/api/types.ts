@@ -143,6 +143,8 @@ export interface components {
             file?: string | null;
             /** Raw Text */
             raw_text?: string | null;
+            /** Url */
+            url?: string | null;
             /**
              * Document Type
              * @default custom

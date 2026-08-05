@@ -11,14 +11,18 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile | None = File(None),
     raw_text: str | None = Form(None),
+    url: str | None = Form(None),
     document_type: str = Form("custom")
 ):
     """
     Accepts file upload (PDF/Word/Text) or raw text input.
     Kicks off RAG pipeline in background.
     """
-    if file is None and raw_text is None:
-        raise HTTPException(status_code=400, detail="Must provide either a file upload or raw_text input.")
+    if file is None and raw_text is None and url is None:
+        raise HTTPException(status_code=400, detail="Must provide either a file upload, raw_text input, or a url.")
+
+    if url is not None and not url.strip().startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
         
     doc_id = str(uuid.uuid4())
     
@@ -26,6 +30,10 @@ async def upload_document(
         filename = file.filename or "uploaded_file.txt"
         file_bytes = await file.read()
         raw_input_text = None
+    elif url:
+        filename = "url_import.txt"
+        file_bytes = None
+        raw_input_text = f"URL Content: {url}"
     else:
         filename = "pasted_text.txt"
         file_bytes = None
@@ -43,7 +51,8 @@ async def upload_document(
         doc_id=doc_id,
         filename=filename,
         file_bytes=file_bytes,
-        raw_text=raw_input_text,
+        raw_text=raw_input_text if not url else None,
+        url=url,
         doc_type=document_type
     )
     

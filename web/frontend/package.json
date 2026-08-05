@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node ./node_modules/vite/bin/vite.js",
-    "generate-types": "node node_modules/openapi-typescript/bin/cli.js http://127.0.0.1:8000/openapi.json -o src/api/types.ts || echo 'Warning: Backend not running, skipping type generation'",
-    "predev": "npm run generate-types",
+    "dev": "node ./scripts/dev.mjs",
+    "dev:frontend": "node ./node_modules/vite/bin/vite.js",
+    "generate-types": "node ./scripts/generate-types.mjs",
     "prebuild": "npm run generate-types",
     "build": "node ./node_modules/typescript/bin/tsc --noEmit && node ./node_modules/vite/bin/vite.js build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",

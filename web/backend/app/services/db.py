@@ -128,7 +128,7 @@ def save_document_analysis(doc_id: str, result: DocumentAnalysisResult) -> None:
                     clause_id, title, category, risk_level, confidence,
                     reasoning, plain_language, rag_comparison, rule_flags,
                     compared_reference_ids, section_location
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s)
             """, (
                 clause_db_id,
                 clause.title,

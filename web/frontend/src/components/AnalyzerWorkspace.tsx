@@ -30,6 +30,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     progressPercentage,
     startFileAnalysis,
     startTextAnalysis,
+    startUrlAnalysis,
     startDemoAnalysis,
     reset: resetAnalysis
   } = useDocumentAnalysis();
@@ -43,6 +44,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
   // Drag/Drop & Clipboard States
   const [isDragging, setIsDragging] = useState(false);
   const [pastedText, setPastedText] = useState('');
+  const [pastedUrl, setPastedUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // General Notification / Toast States
@@ -124,6 +126,18 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     if (!pastedText.trim()) return;
     startTextAnalysis(pastedText);
     setPastedText('');
+  };
+
+  const handleUrlSubmit = () => {
+    const trimmed = pastedUrl.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      setToastMessage('Please enter a valid URL starting with http:// or https://');
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+    startUrlAnalysis(trimmed);
+    setPastedUrl('');
   };
 
   // Risk Level Icon Helpers (mapped to support both mock 'low' and backend 'standard')
@@ -354,6 +368,31 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   className="disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {t('analyzePasted')}
+                </ClayButton>
+              </div>
+            </ClayCard>
+
+            {/* Pasted URL Option */}
+            <ClayCard className="space-y-4 p-6 border border-orange-100 bg-[#FFFDFB]">
+              <div className="flex items-center space-x-2">
+                <Link size={18} className="text-orange-500" />
+                <h3 className="font-bold text-gray-700">{t('pasteWebsiteUrl')}</h3>
+              </div>
+              <input
+                type="url"
+                value={pastedUrl}
+                onChange={(e) => setPastedUrl(e.target.value)}
+                placeholder="https://example.com/terms"
+                className="w-full clay-input rounded-2xl! p-4 text-sm font-mono focus:border-orange-500"
+              />
+              <div className="flex justify-end">
+                <ClayButton 
+                  variant="primary" 
+                  onClick={handleUrlSubmit}
+                  disabled={!pastedUrl.trim() || isAnalyzing}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {t('fetchAndAnalyze')}
                 </ClayButton>
               </div>
             </ClayCard>

@@ -14,6 +14,7 @@ def run_analysis_pipeline(
     filename: str,
     file_bytes: bytes | None = None,
     raw_text: str | None = None,
+    url: str | None = None,
     doc_type: str = "custom"
 ) -> DocumentAnalysisResult:
     """Executes the full end-to-end RAG analysis pipeline and saves output to Postgres."""
@@ -23,7 +24,7 @@ def run_analysis_pipeline(
     try:
         # Stage 1: Parse Document
         print("Stage 1: Parsing document...")
-        parsed_doc = parse_document(file_bytes=file_bytes, filename=filename, raw_text=raw_text)
+        parsed_doc = parse_document(file_bytes=file_bytes, filename=filename, raw_text=raw_text, url=url)
         
         # Stage 2: Clause Segmentation
         print("Stage 2: Segmenting text into clauses...")
@@ -50,7 +51,7 @@ def run_analysis_pipeline(
             clauses=extracted_clauses,
             references_map=references_map,
             rules_map=rules_map,
-            batch_size=5  # batch size of 5 to respect rate limits
+            batch_size=20  # Efficient batching for Gemini 3.5 Flash context window
         )
         
         # Stage 5: Score & Aggregate

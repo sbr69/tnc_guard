@@ -1,6 +1,8 @@
 import io
 import pdfplumber
 import docx
+import requests
+from bs4 import BeautifulSoup
 from ..models.base import CamelModel
 
 class PageContent(CamelModel):
@@ -128,12 +130,37 @@ def parse_txt(file_text: str) -> ParsedDocument:
         sections=sections
     )
 
-def parse_document(file_bytes: bytes | None, filename: str | None, raw_text: str | None = None) -> ParsedDocument:
+def parse_url(url: str) -> ParsedDocument:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    response = requests.get(url, headers=headers, timeout=15)
+    response.raise_for_status()
+    
+    soup = BeautifulSoup(response.content, "html.parser")
+    
+    # Remove script and style elements
+    for script_or_style in soup(["script", "style", "nav", "footer", "header", "aside"]):
+        script_or_style.extract()
+        
+    text = soup.get_text(separator="\n")
+    
+    # Clean up whitespace
+    lines = (line.strip() for line in text.splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    text = "\n".join(chunk for chunk in chunks if chunk)
+    
+    return parse_txt(text)
+
+def parse_document(file_bytes: bytes | None, filename: str | None, raw_text: str | None = None, url: str | None = None) -> ParsedDocument:
+    if url is not None:
+        return parse_url(url)
+        
     if raw_text is not None:
         return parse_txt(raw_text)
     
     if not file_bytes or not filename:
-        raise ValueError("Either raw_text or file_bytes and filename must be provided.")
+        raise ValueError("Either raw_text, url, or file_bytes and filename must be provided.")
         
     ext = filename.split(".")[-1].lower()
     if ext == "pdf":

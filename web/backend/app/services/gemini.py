@@ -4,6 +4,20 @@ from google import genai
 from google.genai import errors
 from ..config import settings
 
+class GeminiSafetyBlockedError(RuntimeError):
+    pass
+
+
+def _is_safety_block_error(error: Exception) -> bool:
+    message = str(error)
+    return any(token in message for token in [
+        "HARM_CATEGORY_",
+        "SAFETY",
+        "PROHIBITED_CONTENT",
+        "BLOCKLIST",
+        "SPII",
+    ])
+
 def get_gemini_client():
     api_key = settings.gemini_api_key or os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -30,39 +44,41 @@ def generate_content_with_retry(prompt: str, response_schema=None, temperature: 
     
     for attempt in range(max_retries):
         try:
-            config_args = {
-                "temperature": temperature,
-                "safety_settings": [
-                    genai.types.SafetySetting(
-                        category=genai.types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                        threshold=genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                    ),
-                    genai.types.SafetySetting(
-                        category=genai.types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                        threshold=genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                    ),
-                    genai.types.SafetySetting(
-                        category=genai.types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                        threshold=genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                    ),
-                    genai.types.SafetySetting(
-                        category=genai.types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                        threshold=genai.types.HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
-                    ),
-                ]
-            }
-            if response_schema:
-                config_args["response_mime_type"] = "application/json"
-                config_args["response_schema"] = response_schema
-                
+            safety_settings = [
+                genai.types.SafetySetting(
+                    category="HARM_CATEGORY_HATE_SPEECH",
+                    threshold="BLOCK_ONLY_HIGH",
+                ),
+                genai.types.SafetySetting(
+                    category="HARM_CATEGORY_HARASSMENT",
+                    threshold="BLOCK_ONLY_HIGH",
+                ),
+                genai.types.SafetySetting(
+                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    threshold="BLOCK_ONLY_HIGH",
+                ),
+                genai.types.SafetySetting(
+                    category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                    threshold="BLOCK_ONLY_HIGH",
+                ),
+            ]
+
+            # The google-genai SDK crashes on Pydantic models containing $ref and $defs.
+            # We enforce JSON via response_mime_type instead of a strict schema object.
             response = client.models.generate_content(
                 model="gemini-3.5-flash-lite",
                 contents=prompt,
-                config=genai.types.GenerateContentConfig(**config_args)
+                config=genai.types.GenerateContentConfig(
+                    temperature=temperature,
+                    safety_settings=safety_settings,
+                    response_mime_type="application/json",
+                )
             )
             return response.text
             
         except errors.APIError as e:
+            if _is_safety_block_error(e):
+                raise GeminiSafetyBlockedError(f"Gemini safety block: {e}") from e
             # Check for rate limit / RESOURCE_EXHAUSTED (429)
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                 print(f"Gemini API rate limit hit (429). Retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")

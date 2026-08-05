@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { components } from '../api/types';
-import { uploadDocumentFile, uploadDocumentText, getDocumentAnalysis, getDemoDocuments } from '../api/client';
+import { uploadDocumentFile, uploadDocumentText, uploadDocumentUrl, getDocumentAnalysis, getDemoDocuments } from '../api/client';
 
 type DocumentAnalysisResult = components['schemas']['DocumentAnalysisResult'];
 
@@ -128,6 +128,24 @@ export function useDocumentAnalysis() {
     }
   }, [clearPolling]);
 
+  const startUrlAnalysis = useCallback(async (url: string, docType: string = 'custom') => {
+    setLoading(true);
+    setError(null);
+    setDocument(null);
+    setProgressStep('Fetching document from URL...');
+    setProgressPercentage(5);
+    clearPolling();
+    
+    try {
+      const res = await uploadDocumentUrl(url, docType);
+      pollDocument(res.id);
+    } catch (err: any) {
+      setError(err.message || 'Failed to start URL analysis.');
+      setLoading(false);
+      setProgressPercentage(null);
+    }
+  }, [pollDocument, clearPolling]);
+
   const reset = useCallback(() => {
     setDocument(null);
     setLoading(false);
@@ -145,6 +163,7 @@ export function useDocumentAnalysis() {
     progressPercentage,
     startFileAnalysis,
     startTextAnalysis,
+    startUrlAnalysis,
     startDemoAnalysis,
     reset
   };

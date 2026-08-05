@@ -61,6 +61,8 @@ export const translations = {
     browseFiles: "Browse local files",
     pasteAgreement: "Paste agreement text instead",
     analyzePasted: "Analyze Pasted Text",
+    pasteWebsiteUrl: "Paste Website URL",
+    fetchAndAnalyze: "Fetch and Analyze",
     tryStandard: "Or try a standard template",
     healthScoreOverview: "Document Health Score",
     noClausesMatch: "No clauses match this filter category.",
