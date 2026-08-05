@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Upload, FileText, ArrowLeft, AlertTriangle, CheckCircle, 
@@ -6,8 +6,13 @@ import {
 } from 'lucide-react';
 import { ClayCard } from './ClayCard';
 import { ClayButton } from './ClayButton';
-import { mockDocuments, Document, Clause } from '../mockData';
+import { mockDocuments } from '../mockData';
+import { components } from '../api/types';
+import { getDemoDocuments } from '../api/client';
+import { useDocumentAnalysis } from '../hooks/useDocumentAnalysis';
 import { t } from '../i18n';
+
+type AnalyzedClause = components['schemas']['AnalyzedClause'];
 
 interface AnalyzerWorkspaceProps {
   initialDocId?: string;
@@ -18,36 +23,64 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
   initialDocId, 
   onBackToHome 
 }) => {
-  // Loaded Document State
-  const [currentDoc, setCurrentDoc] = useState<Document | null>(() => {
-    if (initialDocId) {
-      return mockDocuments.find(d => d.id === initialDocId) || null;
-    }
-    return null;
-  });
+  const {
+    document: currentDoc,
+    loading: isAnalyzing,
+    error: analysisError,
+    progressStep,
+    progressPercentage,
+    startFileAnalysis,
+    startTextAnalysis,
+    startDemoAnalysis,
+    reset: resetAnalysis
+  } = useDocumentAnalysis();
 
   // Filter State
-  const [filterLevel, setFilterLevel] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [filterLevel, setFilterLevel] = useState<'all' | 'high' | 'medium' | 'low' | 'standard' | 'cautionary' | 'risky'>('all');
 
   // Active Clause Selection
-  const [selectedClause, setSelectedClause] = useState<Clause | null>(() => {
-    if (initialDocId) {
-      const doc = mockDocuments.find(d => d.id === initialDocId);
-      return doc && doc.clauses.length > 0 ? doc.clauses[0] : null;
-    }
-    return null;
-  });
+  const [selectedClause, setSelectedClause] = useState<AnalyzedClause | null>(null);
 
-  // Upload/Processing States
+  // Drag/Drop & Clipboard States
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [processStep, setProcessStep] = useState<string>('');
   const [pastedText, setPastedText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // General Notification / Toast States
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Demo Documents list
+  const [demoDocs, setDemoDocs] = useState<any[]>(mockDocuments);
+
+  // Load demo documents on mount
+  useEffect(() => {
+    async function fetchDemos() {
+      try {
+        const liveDemos = await getDemoDocuments();
+        setDemoDocs(liveDemos);
+      } catch (e) {
+        console.warn("Using offline mock documents list:", e);
+      }
+    }
+    fetchDemos();
+  }, []);
+
+  // Trigger demo document parsing if initialDocId is provided
+  useEffect(() => {
+    if (initialDocId) {
+      startDemoAnalysis(initialDocId);
+    }
+  }, [initialDocId, startDemoAnalysis]);
+
+  // Automatically select the first clause when a document finishes loading
+  useEffect(() => {
+    if (currentDoc && currentDoc.clauses.length > 0) {
+      setSelectedClause(currentDoc.clauses[0]);
+    } else {
+      setSelectedClause(null);
+    }
+  }, [currentDoc]);
 
   // Trigger brief visual toasts
   const triggerToast = (msg: string) => {
@@ -77,158 +110,98 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     setIsDragging(false);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      processUploadedFile(files[0]);
+      startFileAnalysis(files[0]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      processUploadedFile(files[0]);
+      startFileAnalysis(files[0]);
     }
-  };
-
-  // Mock processing simulation for uploaded document
-  const processUploadedFile = (file: File) => {
-    setUploadProgress(0);
-    setProcessStep('Reading file contents...');
-
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 25;
-      setUploadProgress(progress);
-      
-      if (progress === 25) {
-        setProcessStep('Extracting individual provisions...');
-      } else if (progress === 50) {
-        setProcessStep('Comparing with standard reference clauses (RAG)...');
-      } else if (progress === 75) {
-        setProcessStep('Flagging unusual or high-risk legal terms...');
-      } else if (progress === 100) {
-        clearInterval(interval);
-        setTimeout(() => {
-          // Generate mock parsed document
-          const newDoc: Document = {
-            id: `uploaded-${Date.now()}`,
-            title: file.name.replace(/\.[^/.]+$/, ""), // remove extension
-            type: 'custom',
-            uploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-            healthScore: 54,
-            summary: `Successfully parsed custom document "${file.name}". Out of 3 detected clauses, 1 has been flagged as high-risk due to non-standard liabilities.`,
-            clauses: [
-              {
-                id: 'up-c1',
-                title: 'Limitation of Provider Liability',
-                category: 'Liability & Indemnity',
-                riskLevel: 'high',
-                originalText: 'UNDER NO CIRCUMSTANCES SHALL THE PROVIDER OR ITS AFFILIATES BE LIABLE FOR ANY INDIRECT, INCIDENTAL, CONSEQUENTIAL, SPECIAL OR EXEMPLARY DAMAGES ARISING OUT OF OR IN CONNECTION WITH THE SERVICES, EVEN IF ADVISED OF THE POSSIBILITY OF DAMAGES, EXCLUDING DIRECT LIABILITY UP TO THE SUM OF FIFTY DOLLARS ($50).',
-                simplifiedText: 'The company is not responsible for any indirect damages you suffer. If they break the contract, the maximum money you can recover from them is capped at just $50.',
-                explanation: 'A $50 liability cap is extremely low and effectively prevents you from recovering any real damages or losses caused by the provider\'s system outages, security breaches, or failure to perform.',
-                ragComparison: 'Standard software and service provider agreements specify a liability cap equal to either $1000 or the total fees paid by the client in the prior 12 months, which is fair and reciprocal.'
-              },
-              {
-                id: 'up-c2',
-                title: 'Data Collection & Advertising Permissions',
-                category: 'Privacy',
-                riskLevel: 'medium',
-                originalText: 'YOU GRANT THE PROVIDER A PERPETUAL, IRREVOCABLE, WORLDWIDE, ROYALT-FREE LICENSE TO AGGREGATE, ANALYZE, ANONYMIZE, AND SELL DATA DERIVED FROM YOUR TRANSACTIONS TO THIRD-PARTY ADVERTISING CONGRUPATIONS.',
-                simplifiedText: 'The company has a permanent, free license to gather your transaction history, package it, and sell it to advertising companies.',
-                explanation: 'Selling transaction data to third parties is a caution-level clause. Many privacy-conscious clients would reject this term or require an explicit opt-out.',
-                ragComparison: 'Standard corporate privacy terms allow data aggregation for internal analytics and product improvement, but prohibit selling individual or transaction-level data to third-party ad brokers without explicit consent.'
-              },
-              {
-                id: 'up-c3',
-                title: 'General Support Obligations',
-                category: 'Service Level',
-                riskLevel: 'low',
-                originalText: 'THE PROVIDER SHALL EXERT COMMERCIALLY REASONABLE EFFORTS TO PROVIDE SYSTEM SUPPORT VIA EMAIL FROM MONDAY THROUGH FRIDAY, 9:00 AM TO 5:00 PM EST, EXCLUDING NATIONAL BANK HOLIDAYS.',
-                simplifiedText: 'Support is available via email on weekdays (Mon-Fri) from 9 AM to 5 PM EST, except for public holidays.',
-                explanation: 'This is a standard, reasonable support policy for non-critical software services.',
-                ragComparison: 'Aligned with basic service industry support expectations.'
-              }
-            ]
-          };
-
-          setCurrentDoc(newDoc);
-          setSelectedClause(newDoc.clauses[0]);
-          setUploadProgress(null);
-          triggerToast('Document parsed successfully!');
-        }, 800);
-      }
-    }, 500);
   };
 
   const handlePasteSubmit = () => {
     if (!pastedText.trim()) return;
-    
-    // Simulate paste parse
-    setUploadProgress(10);
-    setProcessStep('Reading pasted agreement text...');
-    
-    setTimeout(() => {
-      const newDoc: Document = {
-        id: `pasted-${Date.now()}`,
-        title: 'Pasted Custom Document',
-        type: 'custom',
-        uploadDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        healthScore: 60,
-        summary: 'Parsed from pasted text block. Identified 2 clauses for review.',
-        clauses: [
-          {
-            id: 'paste-c1',
-            title: 'Governing Law and Forum Selection',
-            category: 'Governing Law',
-            riskLevel: 'medium',
-            originalText: 'THIS AGREEMENT SHALL BE GOVERNED BY, AND CONSTRUED IN ACCORDANCE WITH, THE LAWS OF THE STATE OF DELAWARE, WITHOUT GIVING EFFECT TO CONFLICTS OF LAW PRINCIPLES. ANY LEGAL ACTION ARISNG OUT OF THIS LEASE MUST BE BROUGHT EXCLUSIVELY IN THE COURT OF CHANCERY IN WILMINGTON, DELAWARE.',
-            simplifiedText: 'Any disputes or lawsuits about this agreement must take place exclusively in the courts of Wilmington, Delaware, under Delaware law.',
-            explanation: 'Forum selection clauses force you to travel to a specific location (often Delaware for SaaS, or the landlord\'s home state) to file a lawsuit, which can be highly expensive and inconvenient.',
-            ragComparison: 'Standard customer contracts allow legal disputes to be resolved in the user\'s local state courts, or at least state that governing law matches the location where services are rendered.'
-          },
-          {
-            id: 'paste-c2',
-            title: 'Late Rent Payment Penalty Fee',
-            category: 'Rental Terms',
-            riskLevel: 'high',
-            originalText: 'IN THE EVENT RENT IS NOT PAID BY THE FIRST (1ST) DAY OF THE CALENDAR MONTH, TENANT AGREES TO PAY A LATE CHARGE OF TEN PERCENT (10%) OF THE TOTAL MONTHLY RENTAL AMOUNT FOR EACH DAY RENT REMAINS UNPAID.',
-            simplifiedText: 'If your rent is late, you will be charged a late fee of 10% of your rent every single day until you pay.',
-            explanation: 'Charging a 10% daily penalty accumulates extremely quickly and is illegal under most local rental laws, which cap late fees at a reasonable flat rate or 5-10% of rent per month total.',
-            ragComparison: 'Standard rental contracts restrict late fees to a 3-5 day grace period, followed by a flat fee (e.g. $50) or a maximum cumulative fee of 5% of monthly rent.'
-          }
-        ]
-      };
-      
-      setCurrentDoc(newDoc);
-      setSelectedClause(newDoc.clauses[0]);
-      setUploadProgress(null);
-      setPastedText('');
-      triggerToast('Pasted text analyzed!');
-    }, 1500);
+    startTextAnalysis(pastedText);
+    setPastedText('');
   };
 
-  // Risk Level Icon Helpers
-  const getRiskIcon = (level: 'low' | 'medium' | 'high') => {
+  // Risk Level Icon Helpers (mapped to support both mock 'low' and backend 'standard')
+  const getRiskIcon = (level: string) => {
     switch (level) {
       case 'high':
+      case 'risky':
         return <ShieldAlert className="text-red-600" size={18} />;
       case 'medium':
+      case 'cautionary':
         return <AlertTriangle className="text-yellow-600" size={18} />;
       case 'low':
+      case 'standard':
+      default:
         return <CheckCircle className="text-green-600" size={18} />;
     }
   };
 
-  const getRiskBadgeColor = (level: 'low' | 'medium' | 'high') => {
+  const getRiskBadgeColor = (level: string) => {
     switch (level) {
-      case 'high': return 'bg-red-100 text-red-800 border border-red-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-      case 'low': return 'bg-green-100 text-green-800 border border-green-200';
+      case 'high':
+      case 'risky':
+        return 'bg-red-100 text-red-800 border border-red-200';
+      case 'medium':
+      case 'cautionary':
+        return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+      case 'low':
+      case 'standard':
+      default:
+        return 'bg-green-100 text-green-800 border border-green-200';
     }
   };
 
-  const filteredClauses = currentDoc?.clauses.filter(clause => {
+  const filteredClauses = currentDoc?.clauses.filter((clause: AnalyzedClause) => {
     if (filterLevel === 'all') return true;
+    
+    if (filterLevel === 'low' || filterLevel === 'standard') {
+      return clause.riskLevel === 'standard';
+    }
+    if (filterLevel === 'medium' || filterLevel === 'cautionary') {
+      return clause.riskLevel === 'cautionary';
+    }
+    if (filterLevel === 'high' || filterLevel === 'risky') {
+      return clause.riskLevel === 'risky';
+    }
     return clause.riskLevel === filterLevel;
   }) || [];
+
+  const countRisks = (level: 'high' | 'medium' | 'low') => {
+    if (!currentDoc) return 0;
+    if (level === 'high') {
+      return currentDoc.clauses.filter((c: AnalyzedClause) => c.riskLevel === 'risky').length;
+    }
+    if (level === 'medium') {
+      return currentDoc.clauses.filter((c: AnalyzedClause) => c.riskLevel === 'cautionary').length;
+    }
+    if (level === 'low') {
+      return currentDoc.clauses.filter((c: AnalyzedClause) => c.riskLevel === 'standard').length;
+    }
+    return 0;
+  };
+
+  const getClayCardVariant = (level: string): 'default' | 'low' | 'medium' | 'high' => {
+    switch (level) {
+      case 'high':
+      case 'risky':
+        return 'high';
+      case 'medium':
+      case 'cautionary':
+        return 'medium';
+      case 'low':
+      case 'standard':
+        return 'low';
+      default:
+        return 'default';
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 min-h-screen">
@@ -250,13 +223,20 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
       {/* Header Panel */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
         <div className="flex items-center space-x-4">
-          <ClayButton variant="secondary" onClick={onBackToHome} className="p-3!">
+          <ClayButton 
+            variant="secondary" 
+            onClick={() => {
+              resetAnalysis();
+              onBackToHome();
+            }} 
+            className="p-3!"
+          >
             <ArrowLeft size={16} />
           </ClayButton>
           <div>
             <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('simplificationSuite')}</span>
             <h1 className="text-2xl md:text-3xl font-extrabold text-gray-800">
-              {currentDoc ? currentDoc.title : t('dynamicUpload')}
+              {currentDoc ? currentDoc.filename : t('dynamicUpload')}
             </h1>
           </div>
         </div>
@@ -288,17 +268,31 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
           <div className="lg:col-span-7 space-y-6">
             <h2 className="text-xl font-bold text-gray-700">{t('chooseAgreement')}</h2>
             
-            {uploadProgress !== null ? (
-              <ClayCard className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+            {analysisError && (
+              <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-2xl text-sm font-semibold flex items-center justify-between shadow-xs">
+                <span>{analysisError}</span>
+                <button 
+                  onClick={resetAnalysis} 
+                  className="bg-red-200 text-red-900 px-3 py-1 rounded-full text-xs font-bold hover:bg-red-300 cursor-pointer transition-colors"
+                >
+                  {t('clear')}
+                </button>
+              </div>
+            )}
+            
+            {isAnalyzing ? (
+              <ClayCard className="flex flex-col items-center justify-center py-20 text-center space-y-4 border border-orange-100">
                 <div className="relative w-20 h-20">
                   <div className="absolute inset-0 rounded-full border-4 border-orange-100" />
                   <div className="absolute inset-0 rounded-full border-4 border-orange-500 border-t-transparent animate-spin" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="font-bold text-lg text-gray-700">{processStep}</h3>
-                  <div className="w-48 bg-orange-100 h-2 rounded-full mx-auto overflow-hidden p-px">
-                    <div className="bg-orange-500 h-full rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
-                  </div>
+                  <h3 className="font-bold text-lg text-gray-700">{progressStep}</h3>
+                  {progressPercentage !== null && (
+                    <div className="w-48 bg-orange-100 h-2 rounded-full mx-auto overflow-hidden p-px">
+                      <div className="bg-orange-500 h-full rounded-full transition-all duration-300" style={{ width: `${progressPercentage}%` }} />
+                    </div>
+                  )}
                 </div>
               </ClayCard>
             ) : (
@@ -354,7 +348,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                 <ClayButton 
                   variant="primary" 
                   onClick={handlePasteSubmit}
-                  disabled={!pastedText.trim()}
+                  disabled={!pastedText.trim() || isAnalyzing}
                   className="disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {t('analyzePasted')}
@@ -367,24 +361,23 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
           <div className="lg:col-span-5 space-y-6">
             <h2 className="text-xl font-bold text-gray-700">{t('tryStandard')}</h2>
             <div className="grid gap-4">
-              {mockDocuments.map((doc) => (
+              {demoDocs.map((doc) => (
                 <div 
                   key={doc.id}
                   onClick={() => {
-                    setCurrentDoc(doc);
-                    setSelectedClause(doc.clauses[0]);
+                    startDemoAnalysis(doc.id);
                   }}
                   className="cursor-pointer group"
                 >
                   <ClayCard className="p-5 border-2 border-orange-100 hover:border-orange-300 bg-white transition-all duration-300">
                     <div className="flex justify-between items-start">
                       <h3 className="font-bold text-gray-800 group-hover:text-orange-600 transition-colors">
-                        {doc.title}
+                        {doc.filename || doc.title}
                       </h3>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                        doc.type === 'tos' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
+                        doc.documentType === 'tos' || doc.type === 'tos' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
                       }`}>
-                        {doc.type === 'tos' ? 'Terms' : 'Lease'}
+                        {doc.documentType === 'tos' || doc.type === 'tos' ? 'Terms' : 'Lease'}
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 leading-relaxed mt-2">{doc.summary}</p>
@@ -415,7 +408,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                 {/* Visual Circular Clay Dial */}
                 <div className="w-28 h-28 rounded-full bg-orange-50 border-4 border-orange-200 flex items-center justify-center shadow-[inset_0_4px_8px_rgba(0,0,0,0.06),0_10px_20px_-5px_rgba(249,115,22,0.1)]">
                   <span className={`text-3xl font-extrabold ${
-                    currentDoc.healthScore > 60 ? 'text-green-600' : 'text-red-500'
+                    (currentDoc.healthScore ?? 0) > 60 ? 'text-green-600' : 'text-red-500'
                   }`}>
                     {currentDoc.healthScore}%
                   </span>
@@ -423,7 +416,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
               </div>
 
               <div className="text-xs text-gray-500 text-center leading-relaxed">
-                {currentDoc.healthScore > 60 
+                {(currentDoc.healthScore ?? 0) > 60 
                   ? 'This document is mostly balanced, but features a few sections to review.' 
                   : 'Warning: This document contains heavily asymmetrical liability or gotcha clauses.'}
               </div>
@@ -431,15 +424,15 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
               {/* Quick counts */}
               <div className="grid grid-cols-3 gap-2 pt-2 text-[11px] font-bold uppercase tracking-wider">
                 <div className="bg-red-50 text-red-800 p-2 rounded-xl border border-red-100">
-                  <span className="block text-sm font-black">{currentDoc.clauses.filter(c => c.riskLevel === 'high').length}</span>
+                  <span className="block text-sm font-black">{countRisks('high')}</span>
                   High
                 </div>
                 <div className="bg-yellow-50 text-yellow-800 p-2 rounded-xl border border-yellow-100">
-                  <span className="block text-sm font-black">{currentDoc.clauses.filter(c => c.riskLevel === 'medium').length}</span>
+                  <span className="block text-sm font-black">{countRisks('medium')}</span>
                   Caution
                 </div>
                 <div className="bg-green-50 text-green-800 p-2 rounded-xl border border-green-100">
-                  <span className="block text-sm font-black">{currentDoc.clauses.filter(c => c.riskLevel === 'low').length}</span>
+                  <span className="block text-sm font-black">{countRisks('low')}</span>
                   Safe
                 </div>
               </div>
@@ -485,7 +478,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   {t('noClausesMatch')}
                 </div>
               ) : (
-                filteredClauses.map((clause) => {
+                filteredClauses.map((clause: AnalyzedClause) => {
                   const isActive = selectedClause?.id === clause.id;
                   return (
                     <div 
@@ -505,7 +498,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                         <div className="flex justify-between items-start gap-2">
                           <div>
                             <span className="text-[10px] text-gray-400 block mb-1 font-bold uppercase tracking-wider">
-                              {clause.category}
+                              {clause.category.replace(/_/g, ' ')}
                             </span>
                             <h4 className="font-bold text-sm text-gray-800 leading-tight">
                               {clause.title}
@@ -515,7 +508,10 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                             getRiskBadgeColor(clause.riskLevel)
                           }`}>
                             {getRiskIcon(clause.riskLevel)}
-                            <span className="ml-1">{clause.riskLevel === 'medium' ? 'Caution' : clause.riskLevel}</span>
+                            <span className="ml-1">
+                              {clause.riskLevel === 'cautionary' ? 'Caution' :
+                               clause.riskLevel === 'standard' ? 'Safe' : 'Risky'}
+                            </span>
                           </span>
                         </div>
                       </ClayCard>
@@ -585,15 +581,15 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
 
                 {/* RAG Reference comparison card (Bottom) */}
                 <ClayCard 
-                  variant={selectedClause.riskLevel}
+                  variant={getClayCardVariant(selectedClause.riskLevel)}
                   className="space-y-4 p-6"
                 >
                   <div className="flex items-center space-x-2">
                     {getRiskIcon(selectedClause.riskLevel)}
                     <h3 className="font-extrabold text-lg uppercase tracking-wide">
-                      {selectedClause.riskLevel === 'high' 
+                      {selectedClause.riskLevel === 'risky'
                         ? 'High-Risk Gotcha Identified' 
-                        : selectedClause.riskLevel === 'medium'
+                        : selectedClause.riskLevel === 'cautionary'
                         ? 'Clause Deviation Flagged'
                         : 'Standard Terms Confirmed'}
                     </h3>

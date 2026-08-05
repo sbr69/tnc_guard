@@ -72,6 +72,7 @@ export const translations = {
     ragDatabaseAlternative: "RAG Database Standard Alternative:",
     noClauseSelected: "No Clause Selected",
     selectClauseDesc: "Select a clause from the sidebar to view dynamic analysis.",
+    clear: "Clear",
 
     // Extension Reports translations
     privacyPolicy: "Privacy Policy",

@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "node ./node_modules/vite/bin/vite.js",
+    "generate-types": "node node_modules/openapi-typescript/bin/cli.js http://127.0.0.1:8000/openapi.json -o src/api/types.ts || echo 'Warning: Backend not running, skipping type generation'",
+    "predev": "npm run generate-types",
+    "prebuild": "npm run generate-types",
     "build": "node ./node_modules/typescript/bin/tsc --noEmit && node ./node_modules/vite/bin/vite.js build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "node ./node_modules/vite/bin/vite.js preview"
@@ -20,6 +23,7 @@
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
     "@vitejs/plugin-react": "4.3.4",
+    "openapi-typescript": "7.5.2",
     "tailwindcss": "4.0.0",
     "typescript": "5.7.3",
     "vite": "6.1.0"

@@ -8,7 +8,10 @@ import psycopg2
 from dotenv import load_dotenv
 
 # Load env variables from .env if present
-load_dotenv()
+for path in [".env", "backend/.env", "../.env"]:
+    if os.path.exists(path):
+        load_dotenv(path)
+        break
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -36,7 +39,7 @@ def get_db_connection():
         sys.exit(1)
 
 def setup_database(cursor):
-    """Enables pgvector and sets up the reference_clauses table."""
+    """Enables pgvector and sets up all required system tables."""
     print("Ensuring pgvector extension is enabled...")
     cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     
@@ -49,25 +52,66 @@ def setup_database(cursor):
             risk_label TEXT NOT NULL,
             explanation TEXT NOT NULL,
             source TEXT NOT NULL,
-            embedding vector(768) NOT NULL,
+            embedding vector(3072) NOT NULL,
             created_at TIMESTAMPTZ DEFAULT NOW()
         );
     """)
-    
-    # Create IVFFlat index for faster vector operations (768 dimensions)
-    # Note: cosine search uses vector_cosine_ops
+
+    print("Checking for documents table...")
     cursor.execute("""
-        CREATE INDEX IF NOT EXISTS reference_clauses_embedding_idx 
-        ON reference_clauses 
-        USING ivfflat (embedding vector_cosine_ops) WITH (lists = 20);
+        CREATE TABLE IF NOT EXISTS documents (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            filename TEXT NOT NULL,
+            raw_text TEXT NOT NULL,
+            document_type TEXT DEFAULT 'custom',
+            status TEXT DEFAULT 'processing',
+            health_score INT,
+            summary TEXT,
+            error_message TEXT,
+            processing_time_seconds FLOAT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        );
     """)
+
+    print("Checking for clauses table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS clauses (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            doc_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+            text TEXT NOT NULL,
+            section_path TEXT,
+            order_index INT NOT NULL,
+            char_offset_start INT,
+            char_offset_end INT,
+            embedding vector(3072)
+        );
+    """)
+
+    print("Checking for risk_flags table...")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS risk_flags (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            clause_id UUID REFERENCES clauses(id) ON DELETE CASCADE,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            risk_level TEXT NOT NULL,
+            confidence FLOAT NOT NULL,
+            reasoning TEXT NOT NULL,
+            plain_language TEXT NOT NULL,
+            rag_comparison TEXT NOT NULL,
+            rule_flags TEXT[] DEFAULT '{}',
+            compared_reference_ids UUID[] DEFAULT '{}',
+            section_location TEXT
+        );
+    """)
+    
     print("Database schema successfully set up.")
 
 def generate_embeddings(client, texts):
     """Generates 768-dimension embeddings for a list of texts using Gemini API."""
     try:
         response = client.models.embed_content(
-            model="text-embedding-004",
+            model="gemini-embedding-001",
             contents=texts
         )
         # Extract vector values
@@ -84,8 +128,7 @@ def seed_corpus(csv_path, batch_size=10):
     check_env()
     
     print(f"Initializing Gemini Client...")
-    # Client automatically reads GEMINI_API_KEY from environment
-    client = genai.Client()
+    client = genai.Client(api_key=GEMINI_API_KEY)
     
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -154,12 +197,12 @@ def run_test_query(query_text, limit=3):
     check_env()
     
     print(f"Testing similarity search for query: '{query_text}'")
-    client = genai.Client()
+    client = genai.Client(api_key=GEMINI_API_KEY)
     
     try:
         # Embed query text
         response = client.models.embed_content(
-            model="text-embedding-004",
+            model="gemini-embedding-001",
             contents=query_text
         )
         query_vector = response.embeddings[0].values
