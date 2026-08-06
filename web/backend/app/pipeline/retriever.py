@@ -13,12 +13,15 @@ def batch_retrieve_references(clauses: list[ExtractedClause], limit: int = 5, th
         client = get_gemini_client()
         texts = [c.text for c in clauses]
         
-        # Batch call to Gemini embedding service
-        response = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=texts
-        )
-        embeddings = [item.values for item in response.embeddings]
+        embeddings = []
+        chunk_size = 50
+        for i in range(0, len(texts), chunk_size):
+            chunk = texts[i:i + chunk_size]
+            response = client.models.embed_content(
+                model="gemini-embedding-001",
+                contents=chunk
+            )
+            embeddings.extend([item.values for item in response.embeddings])
         
         print("Embeddings generated. Querying pgvector for each clause...")
         results = {}

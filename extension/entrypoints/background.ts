@@ -1,4 +1,4 @@
-import { defineBackground } from 'wxt/sandbox';
+import { defineBackground } from 'wxt/utils/define-background';
 import { ExtensionPopupData, PolicyType, ExtensionSiteReport } from '../lib/types';
 
 export default defineBackground(() => {

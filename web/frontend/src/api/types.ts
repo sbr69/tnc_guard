@@ -85,6 +85,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/extension/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analyze Site */
+        post: operations["analyze_site_api_extension_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -106,6 +123,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalyzeRequest */
+        AnalyzeRequest: {
+            /** Domain */
+            domain: string;
+            /** Policy Urls */
+            policy_urls: {
+                [key: string]: string | null;
+            };
+        };
         /** AnalyzedClause */
         AnalyzedClause: {
             /** Id */
@@ -206,10 +232,51 @@ export interface components {
          * @enum {string}
          */
         DocumentStatus: "processing" | "done" | "error";
+        /** ExtensionSiteReport */
+        ExtensionSiteReport: {
+            /** Domain */
+            domain: string;
+            /** Sitename */
+            siteName: string;
+            /** Overallscore */
+            overallScore: number;
+            /** Scandate */
+            scanDate: string;
+            /** Status */
+            status: string;
+            /** Policies */
+            policies: {
+                [key: string]: components["schemas"]["PolicySummary"];
+            };
+            /** Topriskflags */
+            topRiskFlags: components["schemas"]["RiskFlag"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** PolicySummary */
+        PolicySummary: {
+            /** Type */
+            type: string;
+            /** Title */
+            title: string;
+            /** Score */
+            score: number;
+            /** Riskflags */
+            riskFlags: string[];
+            /** Clausecount */
+            clauseCount: number;
+            /** Documentid */
+            documentId: string;
+        };
+        /** RiskFlag */
+        RiskFlag: {
+            /** Label */
+            label: string;
+            /** Severity */
+            severity: string;
         };
         /**
          * RiskLevel
@@ -334,6 +401,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    analyze_site_api_extension_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalyzeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionSiteReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

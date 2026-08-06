@@ -59,6 +59,7 @@ def save_placeholder_document(doc_id: str, filename: str, raw_text: str) -> None
         cursor.execute("""
             INSERT INTO documents (id, filename, raw_text, status)
             VALUES (%s, %s, %s, 'processing')
+            ON CONFLICT (id) DO NOTHING
         """, (doc_id, filename, raw_text))
         conn.commit()
     except Exception as e:
