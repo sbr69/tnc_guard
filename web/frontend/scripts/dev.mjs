@@ -64,7 +64,7 @@ async function main() {
 
   const backend = startProcess(
     fullPath,
-    ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'],
+    ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8001'],
     backendRoot,
     'backend',
   );
@@ -87,7 +87,7 @@ async function main() {
     }
   });
 
-  await waitForBackend('http://127.0.0.1:8000/health');
+  await waitForBackend('http://127.0.0.1:8001/health');
 
   const typecheck = isWindows
     ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm run generate-types'], {

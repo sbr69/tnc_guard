@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendRoot = path.resolve(scriptDir, '..');
-const openApiUrl = 'http://127.0.0.1:8000/openapi.json';
+const openApiUrl = 'http://127.0.0.1:8001/openapi.json';
 const outputFile = path.join('src', 'api', 'types.ts');
 const cliPath = path.join(frontendRoot, 'node_modules', 'openapi-typescript', 'bin', 'cli.js');
 
