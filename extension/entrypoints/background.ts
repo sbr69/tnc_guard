@@ -155,7 +155,9 @@ export default defineBackground(() => {
       });
       
       if (!res.ok) {
-        throw new Error(`Worker returned ${res.status}`);
+        const errJson = await res.json().catch(() => null);
+        const detail = errJson?.error || (await res.text().catch(() => ''));
+        throw new Error(detail ? `Analysis Error: ${detail}` : `Worker returned ${res.status}`);
       }
       
       const report: ExtensionSiteReport = await res.json();

@@ -109,7 +109,16 @@ Retrieved Reference Standards:
                 raw_output = raw_output[:-3]
             raw_output = raw_output.strip()
 
-            data = json.loads(raw_output)
+            try:
+                data = json.loads(raw_output)
+            except Exception:
+                import re
+                match = re.search(r'(\{.*\}|\[.*\])', raw_output, re.DOTALL)
+                if match:
+                    data = json.loads(match.group(1))
+                else:
+                    raise
+
             if isinstance(data, list):
                 analyses_list = data
             else:

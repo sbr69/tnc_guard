@@ -2,14 +2,14 @@ import uuid
 import time
 import asyncio
 from fastapi import APIRouter
-from pydantic import BaseModel
+from ..models.base import CamelModel
 from ..pipeline import run_analysis_pipeline
 from ..models.extension import ExtensionSiteReport, PolicySummary, RiskFlag
 from ..models.clause import RiskLevel
 
 router = APIRouter(prefix="/api/extension", tags=["Extension"])
 
-class AnalyzeRequest(BaseModel):
+class AnalyzeRequest(CamelModel):
     domain: str
     policy_urls: dict[str, str | None]
 

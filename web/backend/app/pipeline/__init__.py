@@ -26,7 +26,7 @@ def run_analysis_pipeline(
         # Stage 1: Parse Document
         print("Stage 1: Parsing document...")
         parsed_doc = parse_document(file_bytes=file_bytes, filename=filename, raw_text=raw_text, url=url)
-        save_placeholder_document(doc_id, filename, parsed_doc.cleaned_text)
+        save_placeholder_document(doc_id, filename, parsed_doc.raw_text)
         
         # Stage 2: Clause Segmentation
         print("Stage 2: Segmenting text into clauses...")

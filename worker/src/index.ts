@@ -46,7 +46,7 @@ export default {
         const analysisPromise = Promise.race([
           runAnalysis(domain, policyUrls, env),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Analysis timeout')), 60_000)
+            setTimeout(() => reject(new Error('Analysis timeout')), 300_000)
           )
         ]);
         inFlight.set(domain, analysisPromise);
@@ -84,7 +84,7 @@ export default {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      return new Response(JSON.stringify({ error: 'Report not found' }), { status: 404, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: 'Report not found', cacheMiss: true }), { status: 404, headers: corsHeaders });
     }
 
     return new Response('Not Found', { status: 404, headers: corsHeaders });

@@ -127,8 +127,8 @@ export interface components {
         AnalyzeRequest: {
             /** Domain */
             domain: string;
-            /** Policy Urls */
-            policy_urls: {
+            /** Policyurls */
+            policyUrls: {
                 [key: string]: string | null;
             };
         };

@@ -247,11 +247,11 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const domainParam = params.get('domain');
-    const sourceParam = params.get('source');
     
-    if (sourceParam === 'extension' && domainParam) {
-      setSelectedDomain(domainParam);
-      fetchLiveReport(domainParam);
+    if (domainParam) {
+      const cleanDomain = domainParam.replace(/^https?:\/\//, '').split('/')[0];
+      setSelectedDomain(cleanDomain);
+      fetchLiveReport(cleanDomain);
     }
   }, []);
 
@@ -259,25 +259,41 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      // 1. Fetch summary from Cloudflare Worker
-      // TODO: Replace with production Worker URL when deployed.
+      let reportData: any;
       const workerUrl = `http://127.0.0.1:8787/api/analyze?domain=${encodeURIComponent(domain)}`;
       const res = await fetch(workerUrl);
-      if (!res.ok) throw new Error('Failed to load extension report.');
       
-      const reportData = await res.json();
+      if (res.ok) {
+        reportData = await res.json();
+      } else {
+        // Fallback directly to backend if worker cache missed or returned error
+        const backendRes = await fetch(`http://127.0.0.1:8001/api/extension/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            domain,
+            policy_urls: {
+              privacy: `https://${domain}/privacy`,
+              tos: `https://${domain}/terms`,
+              cookie: null,
+              eula: null
+            }
+          })
+        });
+        if (!backendRes.ok) throw new Error('Failed to load extension report.');
+        reportData = await backendRes.json();
+      }
       
       // 2. Hydrate clauses by fetching documents from backend
       const hydratedPolicies: Record<PolicyType, ExtensionPolicyData> = {} as any;
       
-      for (const [ptype, summary] of Object.entries(reportData.policies)) {
+      for (const [ptype, summary] of Object.entries(reportData.policies || {})) {
         if (!summary) continue;
         const p = summary as any;
         
         let clauses: ExtensionReportClause[] = [];
         if (p.documentId) {
           try {
-            // TODO: Replace with production backend URL when deployed.
             const docRes = await fetch(`http://127.0.0.1:8001/api/documents/${p.documentId}`);
             if (docRes.ok) {
               const docData = await docRes.json();
@@ -341,7 +357,7 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
   const currentSite = currentSiteMap.get(selectedDomain) ?? mockExtensionReports['acme-cloud.com'];
   
   const policyMap = new Map<PolicyType, ExtensionPolicyData>(Object.entries(currentSite.policies) as [PolicyType, ExtensionPolicyData][]);
-  const currentPolicy = policyMap.get(activeTab) ?? currentSite.policies.privacy;
+  const currentPolicy = policyMap.get(activeTab) ?? Object.values(currentSite.policies).find(Boolean) ?? mockExtensionReports['acme-cloud.com'].policies.privacy;
 
   const getScoreBadgeColor = (score: number) => {
     if (score >= 7.5) return 'bg-green-100 text-green-800 border-green-200';
@@ -460,7 +476,9 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
             className="py-2! px-4! text-xs whitespace-nowrap"
             onClick={() => {
               if (customInputUrl.trim()) {
-                alert(`Simulating Extension Fetch for ${customInputUrl}... Report loaded.`);
+                const cleanDomain = customInputUrl.trim().replace(/^https?:\/\//, '').split('/')[0];
+                setSelectedDomain(cleanDomain);
+                fetchLiveReport(cleanDomain);
                 setCustomInputUrl('');
               }
             }}
