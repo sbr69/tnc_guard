@@ -7,39 +7,48 @@ import { ClayButton } from './components/ClayButton';
 import { t } from './i18n';
 
 function App() {
-  const [view, setView] = useState<'landing' | 'analyzer' | 'reports'>('landing');
+  const [pathname, setPathname] = useState<string>(window.location.pathname);
   const [selectedDocId, setSelectedDocId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const viewParam = params.get('view');
-    const docIdParam = params.get('docId');
+    const handlePopState = () => {
+      setPathname(window.location.pathname);
+    };
 
-    if (window.location.pathname.includes('/reports') || viewParam === 'reports') {
-      setView('reports');
-    } else if (docIdParam) {
+    const params = new URLSearchParams(window.location.search);
+    const docIdParam = params.get('docId');
+    if (docIdParam) {
       setSelectedDocId(docIdParam);
-      setView('analyzer');
-    } else if (viewParam === 'analyzer') {
-      setView('analyzer');
     }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const handleStartAnalyzer = (docId?: string) => {
-    setSelectedDocId(docId);
-    setView('analyzer');
+  const navigate = (path: string, docId?: string) => {
+    let targetPath = path;
     if (docId) {
-      window.history.pushState({}, '', `?docId=${docId}`);
-    } else {
-      window.history.pushState({}, '', `?view=analyzer`);
+      targetPath = `${path}?docId=${docId}`;
+      setSelectedDocId(docId);
+    } else if (path !== '/review') {
+      setSelectedDocId(undefined);
     }
+    window.history.pushState({}, '', targetPath);
+    setPathname(path);
+  };
+
+  const handleStartAnalyzer = (docId?: string) => {
+    navigate('/review', docId);
   };
 
   const handleBackToHome = () => {
-    setSelectedDocId(undefined);
-    setView('landing');
-    window.history.pushState({}, '', '/');
+    navigate('/');
   };
+
+  // Determine current active view based on exact path prefix
+  const isReports = pathname.startsWith('/reports');
+  const isReview = pathname.startsWith('/review');
+  const isLanding = !isReports && !isReview;
 
   return (
     <div className="bg-brand-bg min-h-screen">
@@ -57,9 +66,9 @@ function App() {
         {/* Global Page Switcher */}
         <div className="flex items-center space-x-2 bg-orange-50/70 p-1.5 rounded-2xl border border-orange-100">
           <button
-            onClick={() => { setView('landing'); window.history.pushState({}, '', '/'); }}
+            onClick={() => navigate('/')}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              view === 'landing' 
+              isLanding 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
             }`}
@@ -69,9 +78,9 @@ function App() {
           </button>
           
           <button
-            onClick={() => { setView('analyzer'); window.history.pushState({}, '', '?view=analyzer'); }}
+            onClick={() => navigate('/review')}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              view === 'analyzer' 
+              isReview 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
             }`}
@@ -81,9 +90,9 @@ function App() {
           </button>
 
           <button
-            onClick={() => { setView('reports'); window.history.pushState({}, '', '?view=reports'); }}
+            onClick={() => navigate('/reports')}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              view === 'reports' 
+              isReports 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
             }`}
@@ -97,7 +106,7 @@ function App() {
           <ClayButton 
             variant="primary" 
             className="px-3! py-1.5! text-xs"
-            onClick={() => { setView('reports'); window.history.pushState({}, '', '?view=reports'); }}
+            onClick={() => navigate('/reports')}
           >
             {t('checkExtensionDemoNav')}
           </ClayButton>
@@ -105,9 +114,9 @@ function App() {
       </header>
 
       {/* Main Page Rendering */}
-      {view === 'landing' ? (
+      {isLanding ? (
         <LandingPage onStart={handleStartAnalyzer} />
-      ) : view === 'analyzer' ? (
+      ) : isReview ? (
         <AnalyzerWorkspace 
           initialDocId={selectedDocId} 
           onBackToHome={handleBackToHome} 
