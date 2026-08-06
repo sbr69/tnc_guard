@@ -110,9 +110,14 @@ Retrieved Reference Standards:
             raw_output = raw_output.strip()
 
             data = json.loads(raw_output)
+            if isinstance(data, list):
+                analyses_list = data
+            else:
+                analyses_list = data.get("analyses", [])
+
             analyses_by_id = {
                 item["clause_id"]: item
-                for item in data.get("analyses", [])
+                for item in analyses_list
                 if isinstance(item, dict) and "clause_id" in item
             }
 

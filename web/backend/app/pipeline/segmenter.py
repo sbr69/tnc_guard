@@ -6,7 +6,7 @@ from ..models.clause import ExtractedClause
 
 def split_by_regex(text: str) -> list[tuple[str, str]]:
     """Splits structured legal documents using section titles, numbers, or headers."""
-    pattern = r"(?:\n|^)(?:(?:Section|SECTION|Article|ARTICLE|§)\s+\d+[\w\.\-]*|(?:\d+\.\d+)+|[A-Z][A-Z\s]{3,30}|[A-Z]\.\s+[A-Z][a-z]+)\s*(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)?"
+    pattern = r"(?:\n|^)(?:(?:Section|SECTION|Article|ARTICLE|§)[ \t]+\d+[\w\.\-]*|(?:\d+\.\d+)+|(?:\d+\.)|[A-Z][A-Z \t]{3,30}|[A-Z]\.)[ \t]*(?:[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+)*)?"
 
     matches = list(re.finditer(pattern, text))
     if len(matches) < 2:
@@ -28,33 +28,49 @@ def split_by_regex(text: str) -> list[tuple[str, str]]:
 
 def split_by_paragraphs_and_sentences(text: str) -> list[tuple[str, str]]:
     """Deterministic fallback: splits unstructured documents cleanly on double newlines and logical paragraph boundaries."""
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    # PDF parsing often gives single \n instead of \n\n. If there are almost no \n\n, try to split by \n.
+    if text.count("\n\n") < 2 and text.count("\n") > 5:
+        # replace single newlines that don't look like paragraph ends with spaces
+        text = re.sub(r'(?<![.!?])\n(?=[a-z])', ' ', text)
+        paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+    else:
+        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+
     clauses: list[tuple[str, str]] = []
     
     current_title_idx = 1
+    buffer = ""
     for p in paragraphs:
-        if len(p) < 25:  # Likely a standalone title/header line
+        if len(p) < 25:
+            # It's a short line, might be a header. Append to buffer so we don't lose text.
+            buffer += p + "\n"
             continue
+            
+        full_p = (buffer + p).strip()
+        buffer = ""
         
         # If a single paragraph is enormous (> 1500 chars), split on sentence boundaries
-        if len(p) > 1500:
-            sentences = re.split(r"(?<=[.!?])\s+", p)
-            buffer = ""
+        if len(full_p) > 1500:
+            sentences = re.split(r"(?<=[.!?])\s+", full_p)
+            sentence_buffer = ""
             sub_idx = 1
             for s in sentences:
-                buffer += s + " "
-                if len(buffer) >= 600:
-                    clauses.append((f"Provision {current_title_idx}.{sub_idx}", buffer.strip()))
-                    buffer = ""
+                sentence_buffer += s + " "
+                if len(sentence_buffer) >= 600:
+                    clauses.append((f"Provision {current_title_idx}.{sub_idx}", sentence_buffer.strip()))
+                    sentence_buffer = ""
                     sub_idx += 1
-            if buffer.strip():
-                clauses.append((f"Provision {current_title_idx}.{sub_idx}", buffer.strip()))
+            if sentence_buffer.strip():
+                clauses.append((f"Provision {current_title_idx}.{sub_idx}", sentence_buffer.strip()))
             current_title_idx += 1
         else:
-            first_words = " ".join(p.split()[:4])
+            first_words = " ".join(full_p.split()[:4])
             title = f"Section {current_title_idx}: {first_words}..."
-            clauses.append((title, p))
+            clauses.append((title, full_p))
             current_title_idx += 1
+
+    if buffer.strip():
+        clauses.append((f"Section {current_title_idx}", buffer.strip()))
 
     return clauses
 

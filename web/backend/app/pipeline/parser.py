@@ -57,6 +57,9 @@ def parse_pdf(file_bytes: bytes) -> ParsedDocument:
             level=1
         ))
         
+    if not raw_text.strip():
+        raise Exception("No readable text found in PDF. If this is a scanned document, OCR is not supported. Please paste the text directly or upload a digital PDF/Word document.")
+        
     return ParsedDocument(raw_text=raw_text, pages=pages, sections=sections)
 
 def parse_docx(file_bytes: bytes) -> ParsedDocument:
@@ -132,7 +135,13 @@ def parse_txt(file_text: str) -> ParsedDocument:
 
 def parse_url(url: str) -> ParsedDocument:
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1"
     }
     response = requests.get(url, headers=headers, timeout=15)
     response.raise_for_status()
