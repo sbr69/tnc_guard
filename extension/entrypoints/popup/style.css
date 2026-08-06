@@ -1,0 +1,204 @@
+@import "tailwindcss";
+
+:root {
+  --font-sans: "Outfit", sans-serif;
+  --font-mono: "Geist Mono", "SF Mono", monospace;
+  
+  --color-brand-bg: #FFF7ED;
+  --color-brand-surface: #FFFFFF;
+  --color-brand-ink: #1F2937;
+  --color-brand-primary: #F97316;
+  --color-brand-hover: #EA580C;
+  --color-brand-accent-light: #FFEDD5;
+  --color-brand-accent-sec: #FDBA74;
+  --color-brand-white: #FFF8F6;
+  --color-brand-border: #FFEDD5;
+}
+
+/* Custom Claymorphic Utilities */
+@layer utilities {
+  /* Clay Cards */
+  .clay-card {
+    background-color: #FFFFFF;
+    border: 2px solid #FFEDD5;
+    border-radius: 24px;
+    box-shadow: 
+      0 20px 40px -15px rgba(249, 115, 22, 0.08), 
+      inset 2px 2px 5px rgba(255, 255, 255, 0.9), 
+      inset -4px -4px 10px rgba(249, 115, 22, 0.06);
+    transition: all 300ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .clay-card-interactive:hover {
+    transform: translateY(-4px);
+    box-shadow: 
+      0 28px 48px -18px rgba(249, 115, 22, 0.12), 
+      inset 2px 2px 5px rgba(255, 255, 255, 0.9), 
+      inset -4px -4px 10px rgba(249, 115, 22, 0.06);
+  }
+
+  /* Clay Risk Cards */
+  .clay-card-low {
+    background-color: #F0FDF4;
+    border: 2px solid #DCFCE7;
+    border-radius: 20px;
+    box-shadow: 
+      0 12px 24px -10px rgba(22, 163, 74, 0.08), 
+      inset 2px 2px 4px rgba(255, 255, 255, 0.9), 
+      inset -3px -3px 8px rgba(22, 163, 74, 0.06);
+    transition: all 300ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  
+  .clay-card-medium {
+    background-color: #FEF9C3;
+    border: 2px solid #FEF08A;
+    border-radius: 20px;
+    box-shadow: 
+      0 12px 24px -10px rgba(161, 98, 7, 0.08), 
+      inset 2px 2px 4px rgba(255, 255, 255, 0.9), 
+      inset -3px -3px 8px rgba(161, 98, 7, 0.06);
+    transition: all 300ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .clay-card-high {
+    background-color: #FEF2F2;
+    border: 2px solid #FEE2E2;
+    border-radius: 20px;
+    box-shadow: 
+      0 12px 24px -10px rgba(185, 28, 28, 0.08), 
+      inset 2px 2px 4px rgba(255, 255, 255, 0.9), 
+      inset -3px -3px 8px rgba(185, 28, 28, 0.06);
+    transition: all 300ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  /* Clay Buttons */
+  .clay-btn {
+    border-radius: 9999px;
+    font-weight: 600;
+    transition: all 200ms cubic-bezier(0.23, 1, 0.32, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .clay-btn:active {
+    transform: scale(0.96);
+  }
+
+  .clay-btn-primary {
+    background-color: #F97316;
+    color: #FFFFFF;
+    border: 2px solid #FB923C;
+    box-shadow: 
+      0 10px 20px -8px rgba(249, 115, 22, 0.3), 
+      inset 0 2px 3px rgba(255, 255, 255, 0.6), 
+      inset 0 -3px 5px rgba(0, 0, 0, 0.2);
+  }
+
+  .clay-btn-primary:hover {
+    background-color: #EA580C;
+    box-shadow: 
+      0 12px 24px -6px rgba(249, 115, 22, 0.4), 
+      inset 0 2px 3px rgba(255, 255, 255, 0.6), 
+      inset 0 -3px 5px rgba(0, 0, 0, 0.2);
+  }
+
+  .clay-btn-primary:active {
+    box-shadow: 
+      0 2px 4px rgba(249, 115, 22, 0.15), 
+      inset 0 4px 6px rgba(0, 0, 0, 0.2), 
+      inset 0 -1px 2px rgba(255, 255, 255, 0.3);
+  }
+
+  .clay-btn-secondary {
+    background-color: #FFF8F6;
+    color: #F97316;
+    border: 2px solid #FFEDD5;
+    box-shadow: 
+      0 8px 16px -8px rgba(249, 115, 22, 0.15), 
+      inset 0 2px 3px rgba(255, 255, 255, 0.9), 
+      inset 0 -3px 4px rgba(249, 115, 22, 0.08);
+  }
+
+  .clay-btn-secondary:hover {
+    background-color: #FFEDD5;
+    color: #EA580C;
+    box-shadow: 
+      0 10px 20px -6px rgba(249, 115, 22, 0.2), 
+      inset 0 2px 3px rgba(255, 255, 255, 0.9), 
+      inset 0 -3px 4px rgba(249, 115, 22, 0.08);
+  }
+
+  .clay-btn-secondary:active {
+    box-shadow: 
+      0 2px 4px rgba(249, 115, 22, 0.05), 
+      inset 0 4px 6px rgba(249, 115, 22, 0.12), 
+      inset 0 -1px 2px rgba(255, 255, 255, 0.5);
+  }
+
+  /* Clay Inputs */
+  .clay-input {
+    background-color: #FFFFFF;
+    border: 2px solid #FFEDD5;
+    border-radius: 9999px;
+    box-shadow: 
+      inset 0 2px 4px rgba(249, 115, 22, 0.04), 
+      inset 0 -1px 2px rgba(255, 255, 255, 0.5), 
+      0 4px 12px rgba(249, 115, 22, 0.02);
+    transition: all 250ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .clay-input:focus {
+    border-color: #F97316;
+    outline: none;
+    box-shadow: 
+      inset 0 2px 4px rgba(249, 115, 22, 0.04), 
+      inset 0 -1px 2px rgba(255, 255, 255, 0.5), 
+      0 4px 16px rgba(249, 115, 22, 0.12);
+  }
+
+  /* Custom inner highlight ring for nested highlights */
+  .clay-inner-ring {
+    box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.8), inset -2px -2px 4px rgba(0, 0, 0, 0.05);
+  }
+}
+
+/* PDF Print Export Styles */
+@media print {
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background-color: white !important;
+  }
+  
+  /* Hide navigation and controls */
+  header, .no-print, button {
+    display: none !important;
+  }
+  
+  /* Remove shadows for cleaner PDF rendering */
+  .clay-card, .clay-card-low, .clay-card-medium, .clay-card-high {
+    box-shadow: none !important;
+    border: 1px solid #E5E7EB !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  /* Ensure full width for printed report */
+  .print-full-width {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  
+  /* Expand scrollable areas */
+  .overflow-y-auto {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  
+  /* Adjust margins and layout */
+  .lg\:col-span-7, .lg\:col-span-5 {
+    grid-column: span 12 / span 12 !important;
+  }
+}

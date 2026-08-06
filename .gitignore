@@ -42,3 +42,13 @@ coverage/
 docs/
 *.md
 *.txt
+
+# WXT & Extension
+.wxt/
+.output/
+*.zip
+web-ext.config.ts
+
+# Cloudflare Worker
+.wrangler/
+.dev.vars

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   AlertTriangle, FileWarning, CheckCircle, 
   Filter, Globe, Sparkles
@@ -239,8 +239,103 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
   const [activeTab, setActiveTab] = useState<PolicyType>('privacy');
   const [filterLevel, setFilterLevel] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [customInputUrl, setCustomInputUrl] = useState<string>('');
+  
+  const [liveData, setLiveData] = useState<ExtensionSiteData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const domainParam = params.get('domain');
+    const sourceParam = params.get('source');
+    
+    if (sourceParam === 'extension' && domainParam) {
+      setSelectedDomain(domainParam);
+      fetchLiveReport(domainParam);
+    }
+  }, []);
+
+  const fetchLiveReport = async (domain: string) => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      // 1. Fetch summary from Cloudflare Worker
+      const workerUrl = `http://127.0.0.1:8787/api/analyze?domain=${encodeURIComponent(domain)}`;
+      const res = await fetch(workerUrl);
+      if (!res.ok) throw new Error('Failed to load extension report.');
+      
+      const reportData = await res.json();
+      
+      // 2. Hydrate clauses by fetching documents from backend
+      const hydratedPolicies: Record<PolicyType, ExtensionPolicyData> = {} as any;
+      
+      for (const [ptype, summary] of Object.entries(reportData.policies)) {
+        if (!summary) continue;
+        const p = summary as any;
+        
+        let clauses: ExtensionReportClause[] = [];
+        if (p.document_id) {
+          try {
+            const docRes = await fetch(`http://127.0.0.1:8001/api/documents/${p.document_id}`);
+            if (docRes.ok) {
+              const docData = await docRes.json();
+              clauses = docData.clauses.map((c: any) => ({
+                id: c.id,
+                title: c.title,
+                category: c.category,
+                riskLevel: c.risk_level === 'RISKY' ? 'high' : c.risk_level === 'CAUTIONARY' ? 'medium' : 'low',
+                originalText: c.original_text,
+                simplifiedText: c.simplified_text || 'No simplified text available.',
+                explanation: c.explanation || '',
+                ragComparison: c.recommendation || 'Standard clause.'
+              }));
+            }
+          } catch (err) {
+            console.error('Failed to fetch doc', p.document_id, err);
+          }
+        }
+        
+        Object.defineProperty(hydratedPolicies, ptype, {
+          value: {
+            type: ptype as PolicyType,
+            title: p.title,
+            score: p.score,
+            riskFlags: p.risk_flags,
+            clauses
+          },
+          enumerable: true,
+          writable: true,
+          configurable: true
+        });
+      }
+      
+      setLiveData({
+        domain: reportData.domain,
+        siteName: reportData.site_name,
+        overallScore: reportData.overall_score,
+        scanDate: reportData.scan_date,
+        policies: hydratedPolicies
+      });
+      
+      // Select first available policy as active tab
+      const availableTabs = Object.keys(hydratedPolicies) as PolicyType[];
+      if (availableTabs.length > 0) {
+        setActiveTab(availableTabs[0]);
+      }
+      
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Merge mock data with any fetched live data
   const currentSiteMap = new Map<string, ExtensionSiteData>(Object.entries(mockExtensionReports));
+  if (liveData) {
+    currentSiteMap.set(liveData.domain, liveData);
+  }
+  
   const currentSite = currentSiteMap.get(selectedDomain) ?? mockExtensionReports['acme-cloud.com'];
   
   const policyMap = new Map<PolicyType, ExtensionPolicyData>(Object.entries(currentSite.policies) as [PolicyType, ExtensionPolicyData][]);
@@ -264,6 +359,30 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
     if (filterLevel === 'all') return true;
     return c.riskLevel === filterLevel;
   });
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-8 min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Sparkles className="w-12 h-12 text-orange-500 animate-pulse mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-800">{t('Loading Report...')}</h2>
+          <p className="text-gray-500 mt-2">{t('Fetching analyzed clauses.')}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (errorMsg && !liveData) {
+    return (
+      <div className="max-w-7xl mx-auto px-6 py-8 min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md bg-red-50 p-6 rounded-2xl border border-red-200">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-red-800">{t('Error Loading Report')}</h2>
+          <p className="text-red-600 mt-2">{errorMsg}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 min-h-screen">
@@ -291,11 +410,19 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
           <Globe size={16} className="text-white/80 ml-2" />
           <select 
             value={selectedDomain}
-            onChange={(e) => setSelectedDomain(e.target.value)}
+            onChange={(e) => {
+              setSelectedDomain(e.target.value);
+              if (e.target.value !== 'acme-cloud.com' && e.target.value !== 'social-connect.io') {
+                fetchLiveReport(e.target.value);
+              }
+            }}
             className="bg-transparent text-white font-bold text-sm outline-none cursor-pointer pr-4"
           >
             <option value="acme-cloud.com" className="text-gray-800">{t('acmeOption')}</option>
             <option value="social-connect.io" className="text-gray-800">{t('socialOption')}</option>
+            {liveData && liveData.domain !== 'acme-cloud.com' && liveData.domain !== 'social-connect.io' && (
+              <option value={liveData.domain} className="text-gray-800">{liveData.siteName}</option>
+            )}
           </select>
         </div>
       </div>
@@ -344,17 +471,13 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
       {/* Side-by-Side Policy Tabs in Header */}
       <div className="mb-8">
         <div className="flex space-x-2 border-b border-orange-100 pb-3 overflow-x-auto">
-          {[
-            { id: 'privacy' as PolicyType, label: t('privacyPolicy'), score: currentSite.policies.privacy.score },
-            { id: 'tos' as PolicyType, label: t('termsConditions'), score: currentSite.policies.tos.score },
-            { id: 'cookie' as PolicyType, label: t('cookiePolicy'), score: currentSite.policies.cookie.score },
-            { id: 'eula' as PolicyType, label: t('eula'), score: currentSite.policies.eula.score },
-          ].map((tab) => {
-            const isActive = activeTab === tab.id;
+          {Object.entries(currentSite.policies).map(([id, policy]) => {
+            if (!policy) return null;
+            const isActive = activeTab === id;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                key={id}
+                onClick={() => setActiveTab(id as PolicyType)}
                 className={`
                   flex items-center space-x-2.5 px-5 py-3 rounded-2xl font-bold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap
                   ${isActive 
@@ -363,11 +486,11 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
                   }
                 `}
               >
-                <span>{tab.label}</span>
+                <span className="capitalize">{policy.title}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
                   isActive ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-800'
                 }`}>
-                  {tab.score}/10
+                  {policy.score}/10
                 </span>
               </button>
             );

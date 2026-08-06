@@ -5,6 +5,7 @@ from .segmenter import segment_document
 from .rules import scan_clause_rules
 from .retriever import batch_retrieve_references
 from .reasoner import analyze_clause_batch
+from .verifier import self_verify_risks
 from .scorer import build_analysis_result
 from ..services.db import save_document_analysis, set_document_error
 from ..models.document import DocumentAnalysisResult
@@ -54,12 +55,16 @@ def run_analysis_pipeline(
             batch_size=20  # Efficient batching for Gemini 3.5 Flash context window
         )
         
+        # Stage 4.5: Self-verification
+        print("Stage 4.5: Running self-verification on flagged risks...")
+        verified_clauses = self_verify_risks(analyzed_clauses)
+        
         # Stage 5: Score & Aggregate
         print("Stage 5: Calculating health scores and building report...")
         result = build_analysis_result(
             doc_id=doc_id,
             filename=filename,
-            clauses=analyzed_clauses,
+            clauses=verified_clauses,
             start_time=start_time,
             doc_type=doc_type
         )
