@@ -1,10 +1,5 @@
 import { AnalyzeRequest, ExtensionSiteReport } from './types';
 
-export interface Env {
-  CLARIFYLAW_CACHE: KVNamespace;
-  BACKEND_API_URL: string;
-}
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -48,7 +43,12 @@ export default {
           });
         }
 
-        const analysisPromise = runAnalysis(domain, policyUrls, env);
+        const analysisPromise = Promise.race([
+          runAnalysis(domain, policyUrls, env),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Analysis timeout')), 60_000)
+          )
+        ]);
         inFlight.set(domain, analysisPromise);
 
         try {

@@ -9,6 +9,8 @@ i18n.use(initReactI18next).init({
         "Close": "Close",
         "Analyzing": "Analyzing",
         "Safety Score": "Safety Score",
+        "Risk Flags": "Risk Flags",
+        "Check Summary": "Check Summary",
         "No significant risks detected.": "No significant risks detected.",
         "This site's policies appear fair and standard.": "This site's policies appear fair and standard.",
         "Scanned": "Scanned"

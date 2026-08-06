@@ -260,6 +260,7 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
     setErrorMsg(null);
     try {
       // 1. Fetch summary from Cloudflare Worker
+      // TODO: Replace with production Worker URL when deployed.
       const workerUrl = `http://127.0.0.1:8787/api/analyze?domain=${encodeURIComponent(domain)}`;
       const res = await fetch(workerUrl);
       if (!res.ok) throw new Error('Failed to load extension report.');
@@ -274,24 +275,25 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
         const p = summary as any;
         
         let clauses: ExtensionReportClause[] = [];
-        if (p.document_id) {
+        if (p.documentId) {
           try {
-            const docRes = await fetch(`http://127.0.0.1:8001/api/documents/${p.document_id}`);
+            // TODO: Replace with production backend URL when deployed.
+            const docRes = await fetch(`http://127.0.0.1:8001/api/documents/${p.documentId}`);
             if (docRes.ok) {
               const docData = await docRes.json();
               clauses = docData.clauses.map((c: any) => ({
                 id: c.id,
                 title: c.title,
                 category: c.category,
-                riskLevel: c.risk_level === 'RISKY' ? 'high' : c.risk_level === 'CAUTIONARY' ? 'medium' : 'low',
-                originalText: c.original_text,
-                simplifiedText: c.simplified_text || 'No simplified text available.',
+                riskLevel: c.riskLevel === 'risky' ? 'high' : c.riskLevel === 'cautionary' ? 'medium' : 'low',
+                originalText: c.originalText,
+                simplifiedText: c.simplifiedText || 'No simplified text available.',
                 explanation: c.explanation || '',
-                ragComparison: c.recommendation || 'Standard clause.'
+                ragComparison: c.ragComparison || 'Standard clause.'
               }));
             }
           } catch (err) {
-            console.error('Failed to fetch doc', p.document_id, err);
+            console.error('Failed to fetch doc', p.documentId, err);
           }
         }
         
@@ -300,7 +302,7 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
             type: ptype as PolicyType,
             title: p.title,
             score: p.score,
-            riskFlags: p.risk_flags,
+            riskFlags: p.riskFlags,
             clauses
           },
           enumerable: true,
@@ -311,9 +313,9 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
       
       setLiveData({
         domain: reportData.domain,
-        siteName: reportData.site_name,
-        overallScore: reportData.overall_score,
-        scanDate: reportData.scan_date,
+        siteName: reportData.siteName,
+        overallScore: reportData.overallScore,
+        scanDate: reportData.scanDate,
         policies: hydratedPolicies
       });
       
@@ -365,8 +367,8 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
       <div className="max-w-7xl mx-auto px-6 py-8 min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Sparkles className="w-12 h-12 text-orange-500 animate-pulse mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-800">{t('Loading Report...')}</h2>
-          <p className="text-gray-500 mt-2">{t('Fetching analyzed clauses.')}</p>
+          <h2 className="text-xl font-bold text-gray-800">{t('loadingExtensionReport')}</h2>
+          <p className="text-gray-500 mt-2">{t('fetchingClauses')}</p>
         </div>
       </div>
     );
@@ -377,7 +379,7 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
       <div className="max-w-7xl mx-auto px-6 py-8 min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md bg-red-50 p-6 rounded-2xl border border-red-200">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-red-800">{t('Error Loading Report')}</h2>
+          <h2 className="text-xl font-bold text-red-800">{t('errorLoadingExtensionReport')}</h2>
           <p className="text-red-600 mt-2">{errorMsg}</p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ExtensionPopupData } from '../../lib/types';
 import { Shield, ShieldAlert, ShieldCheck, FileText, CheckCircle2, XCircle, Search, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
 import { browser } from 'wxt/browser';
@@ -10,6 +10,7 @@ export default function App() {
   const [data, setData] = useState<ExtensionPopupData | null>(null);
   const [loadingMsg, setLoadingMsg] = useState<string>('Checking...');
   const [error, setError] = useState<string | null>(null);
+  const domainRef = useRef<string>('');
 
   useEffect(() => {
     // 1. Get current tab domain
@@ -23,6 +24,7 @@ export default function App() {
             setError('Cannot analyze this page type.');
             return;
           }
+          domainRef.current = url.hostname;
           setDomain(url.hostname);
           
           // 2. Ask background for data
@@ -32,6 +34,16 @@ export default function App() {
         }
       }
     });
+
+    const storageListener = (changes: any, area: string) => {
+      if (area !== 'local') return;
+      const cacheKey = `report:${domainRef.current}`;
+      if (domainRef.current && changes[cacheKey]?.newValue) {
+        setData(changes[cacheKey].newValue as ExtensionPopupData);
+        setError(null);
+      }
+    };
+    browser.storage.onChanged.addListener(storageListener);
 
     // 3. Listen for responses
     const listener = (message: any) => {
@@ -49,7 +61,10 @@ export default function App() {
     };
     
     browser.runtime.onMessage.addListener(listener);
-    return () => browser.runtime.onMessage.removeListener(listener);
+    return () => {
+      browser.storage.onChanged.removeListener(storageListener);
+      browser.runtime.onMessage.removeListener(listener);
+    };
   }, []);
 
   const handleCheckSummary = () => {
@@ -99,7 +114,6 @@ export default function App() {
   // Determine risk profile
   const isSafe = data.overallScore >= 7.5;
   const isWarning = data.overallScore >= 5.0 && data.overallScore < 7.5;
-  const isDanger = data.overallScore < 5.0;
 
   const scoreColor = isSafe ? 'text-green-600' : isWarning ? 'text-yellow-600' : 'text-red-600';
   const ScoreIcon = isSafe ? ShieldCheck : isWarning ? ShieldAlert : XCircle;
@@ -134,7 +148,7 @@ export default function App() {
         {data.riskFlags && data.riskFlags.length > 0 ? (
           <div>
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3" /> Risk Flags
+              <AlertTriangle className="w-3 h-3" /> {t('Risk Flags')}
             </h3>
             <div className="space-y-2">
               {data.riskFlags.map((flag, idx) => (
@@ -174,7 +188,7 @@ export default function App() {
           onClick={handleCheckSummary}
           className="clay-btn clay-btn-primary w-full py-3 mt-2 flex items-center justify-center gap-2 text-sm"
         >
-          <FileText className="w-4 h-4" /> Check Summary
+          <FileText className="w-4 h-4" /> {t('Check Summary')}
           <ExternalLink className="w-3 h-3 opacity-70" />
         </button>
 

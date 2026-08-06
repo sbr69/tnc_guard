@@ -73,7 +73,9 @@ export default defineBackground(() => {
       const forceRefresh = message.payload.forceRefresh || false;
       
       triggerAnalysis(domain, await getDiscoveredPolicies(domain), forceRefresh).then((data) => {
-        browser.runtime.sendMessage({ type: 'REPORT_READY', payload: data }).catch(() => {});
+        if (data.status !== 'error') {
+          browser.runtime.sendMessage({ type: 'REPORT_READY', payload: data }).catch(() => {});
+        }
       }).catch(err => {
         browser.runtime.sendMessage({ type: 'REPORT_ERROR', payload: { domain, error: err.message } }).catch(() => {});
       });
@@ -82,7 +84,7 @@ export default defineBackground(() => {
 
     if (message.type === 'OPEN_FULL_REPORT') {
       const domain = message.payload.domain;
-      // In development, the web app runs on localhost:5173
+      // TODO: Replace with production web app URL when deployed (dev runs on localhost:5173).
       const url = `http://localhost:5173/reports?domain=${encodeURIComponent(domain)}&source=extension`;
       browser.tabs.create({ url });
     }
@@ -126,6 +128,7 @@ export default defineBackground(() => {
     // If no policies found at all
     if (Object.values(policyUrls).every(url => url === null)) {
       await updateBadge(null, 'no-policies');
+      browser.runtime.sendMessage({ type: 'NO_POLICIES', payload: { domain } }).catch(() => {});
       return {
         domain,
         siteName: domain,

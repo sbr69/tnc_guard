@@ -103,7 +103,10 @@ export const translations = {
     homeNav: "Home",
     documentWorkspaceNav: "Document Workspace",
     extensionReportsNav: "Extension Reports (/reports)",
-    checkExtensionDemoNav: "Check Extension Demo"
+    checkExtensionDemoNav: "Check Extension Demo",
+    loadingExtensionReport: "Loading Report...",
+    fetchingClauses: "Fetching analyzed clauses.",
+    errorLoadingExtensionReport: "Error Loading Report"
   }
 };
 

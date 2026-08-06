@@ -10,7 +10,7 @@ export default defineConfig({
     ],
   }),
   manifest: {
-    permissions: ['storage', 'contextMenus'],
+    permissions: ['storage', 'contextMenus', 'activeTab'],
     host_permissions: ['<all_urls>'],
     name: 'ClarifyLaw',
     description: 'Simplify legal agreements and identify risks instantly.',
