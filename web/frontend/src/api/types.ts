@@ -94,8 +94,57 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Analyze Site */
+        /**
+         * Analyze Site
+         * @description Legacy extension bridge: analyze the policy URLs supplied by the client.
+         *
+         *     Kept for backward compatibility. New callers (extension + web app) should
+         *     use /api/site/analyze, which auto-discovers missing policies server-side.
+         */
         post: operations["analyze_site_api_extension_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/site/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze Site Url
+         * @description Start (or resume) analysis for a site. Returns 200 if the job finishes
+         *     quickly (cache hit / empty / content-hash reuse), otherwise 202 and the
+         *     client polls GET /api/site/status?hostname=.
+         */
+        post: operations["analyze_site_url_api_site_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/site/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Site Status
+         * @description Poll the in-progress site analysis. 200 + report when done, 202 while
+         *     processing, 404 if no job exists (client should re-POST), 500 on error.
+         */
+        get: operations["site_status_api_site_status_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -283,6 +332,23 @@ export interface components {
          * @enum {string}
          */
         RiskLevel: "standard" | "cautionary" | "risky";
+        /** SiteAnalyzeRequest */
+        SiteAnalyzeRequest: {
+            /** Siteurl */
+            siteUrl: string;
+            /**
+             * Policyurls
+             * @default {}
+             */
+            policyUrls: {
+                [key: string]: string | null;
+            };
+            /**
+             * Forcerefresh
+             * @default false
+             */
+            forceRefresh: boolean;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -425,6 +491,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExtensionSiteReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyze_site_url_api_site_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteAnalyzeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_status_api_site_status_get: {
+        parameters: {
+            query: {
+                hostname: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
