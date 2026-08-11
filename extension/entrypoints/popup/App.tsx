@@ -27,8 +27,10 @@ export default function App() {
           domainRef.current = url.hostname;
           setDomain(url.hostname);
           
-          // 2. Ask background for data
-          browser.runtime.sendMessage({ type: 'GET_CURRENT_REPORT', payload: { domain: url.hostname } });
+          // 2. Ask background for data (send the active tab URL so the backend
+          //    can do server-side discovery for any policy types the content
+          //    script didn't find on the page).
+          browser.runtime.sendMessage({ type: 'GET_CURRENT_REPORT', payload: { domain: url.hostname, pageUrl: url.href } });
         } catch (e) {
           setError('Invalid URL.');
         }
@@ -179,11 +181,11 @@ export default function App() {
           </div>
         )}
 
-        {/* Policies Found */}
+        {/* Policies Found (only documents that were actually found/analyzed) */}
         <div className="flex flex-wrap gap-2 text-xs font-medium pt-1">
-          {data.policiesFound.map(p => (
-            <div key={p.type} className={`flex items-center gap-1 px-2 py-1 rounded-full ${p.found ? 'bg-brand-accent-light text-brand-hover' : 'bg-gray-100 text-gray-400'}`}>
-              {p.found ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+          {data.policiesFound.filter(p => p.found).map(p => (
+            <div key={p.type} className="flex items-center gap-1 px-2 py-1 rounded-full bg-brand-accent-light text-brand-hover">
+              <CheckCircle2 className="w-3 h-3" />
               <span className="capitalize">{p.type === 'tos' ? 'T&C' : p.type}</span>
             </div>
           ))}

@@ -48,7 +48,7 @@ export default defineBackground(() => {
       
       // Force popup open (not always possible from background without user interaction, but we can set state)
       // We will trigger analysis immediately
-      triggerAnalysis(domain, merged, true);
+      triggerAnalysis(tab.url, domain, merged, true);
     }
   });
 
@@ -79,9 +79,13 @@ export default defineBackground(() => {
     
     if (message.type === 'GET_CURRENT_REPORT') {
       const domain = message.payload.domain;
+      const siteUrl = message.payload.pageUrl || (domain ? `https://${domain}/` : undefined);
       const forceRefresh = message.payload.forceRefresh || false;
-      
-      triggerAnalysis(domain, await getDiscoveredPolicies(domain), forceRefresh).then((data) => {
+      if (!siteUrl) {
+        browser.runtime.sendMessage({ type: 'REPORT_ERROR', payload: { domain, error: 'No page URL to analyze.' } }).catch(() => {});
+        return true;
+      }
+      triggerAnalysis(siteUrl, domain, await getDiscoveredPolicies(domain), forceRefresh).then((data) => {
         if (data.status !== 'error') {
           browser.runtime.sendMessage({ type: 'REPORT_READY', payload: data }).catch(() => {});
         }
@@ -121,7 +125,7 @@ export default defineBackground(() => {
     }
   }
 
-  async function triggerAnalysis(domain: string, policyUrls: Record<PolicyType, string | null>, forceRefresh = false): Promise<ExtensionPopupData> {
+  async function triggerAnalysis(siteUrl: string, domain: string, policyUrls: Record<PolicyType, string | null>, forceRefresh = false): Promise<ExtensionPopupData> {
     const cacheKey = `report:${domain}`;
     
     // 1. Check local cache (Tier 1)
@@ -134,33 +138,20 @@ export default defineBackground(() => {
       }
     }
     
-    // If no policies found at all
-    if (Object.values(policyUrls).every(url => url === null)) {
-      await updateBadge(null, 'no-policies');
-      browser.runtime.sendMessage({ type: 'NO_POLICIES', payload: { domain } }).catch(() => {});
-      return {
-        domain,
-        siteName: domain,
-        overallScore: 0,
-        scanDate: new Date().toLocaleDateString(),
-        status: 'error',
-        riskFlags: [],
-        policiesFound: []
-      };
-    }
-    
     await updateBadge(null, 'processing');
-    browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Analyzing via Cloudflare...' } }).catch(() => {});
+    browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Discovering & analyzing policies via Cloudflare...' } }).catch(() => {});
     
-    // 2. Call Cloudflare Worker (Tier 2)
+    // 2. Call Cloudflare Worker (Tier 2) -> backend /api/site/analyze
+    //    The backend merges client-discovered policyUrls with server-side
+    //    discovery (homepage scrape + path guessing) for any missing types.
     // TODO: Update URL when deployed. Using localhost for dev.
-    const WORKER_URL = 'http://127.0.0.1:8787/api/analyze'; 
+    const WORKER_URL = 'http://127.0.0.1:8787/api/site/analyze'; 
     
     try {
       const res = await fetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain, policyUrls, forceRefresh })
+        body: JSON.stringify({ siteUrl, policyUrls, forceRefresh })
       });
       
       if (!res.ok) {
@@ -171,16 +162,33 @@ export default defineBackground(() => {
       
       const report: ExtensionSiteReport = await res.json();
       
-      const policiesFound = Object.entries(report.policies).map(([type, policy]) => ({
+      // Backend returns only the policies it actually found. If none were found
+      // anywhere, surface a clean "no policies" state (no per-type errors).
+      const foundPolicyEntries = Object.entries(report.policies || {});
+      if (foundPolicyEntries.length === 0) {
+        await updateBadge(null, 'no-policies');
+        browser.runtime.sendMessage({ type: 'NO_POLICIES', payload: { domain } }).catch(() => {});
+        return {
+          domain,
+          siteName: domain,
+          overallScore: 0,
+          scanDate: new Date().toLocaleDateString(),
+          status: 'error',
+          riskFlags: [],
+          policiesFound: []
+        };
+      }
+      
+      const policiesFound = foundPolicyEntries.map(([type, policy]) => ({
         type: type as PolicyType,
-        found: !!Reflect.get(policyUrls, type as PolicyType),
+        found: true,
         score: policy?.score ?? null,
         documentId: policy?.documentId ?? null
       }));
       
       const popupData: ExtensionPopupData = {
-        domain: report.domain,
-        siteName: report.siteName,
+        domain: report.domain || domain,
+        siteName: report.siteName || domain,
         overallScore: report.overallScore,
         scanDate: report.scanDate,
         status: report.status,

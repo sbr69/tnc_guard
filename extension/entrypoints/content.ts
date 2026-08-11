@@ -34,6 +34,9 @@ export default defineContentScript({
         const url = new URL(href, window.location.href);
         // Only accept http/https
         if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+        // Strict subdomain targeting: only accept links on the same hostname
+        // as the active page (e.g. website.vercel.app, never vercel.app).
+        if (url.hostname !== window.location.hostname) return null;
         return url.href;
       } catch (e) {
         return null;

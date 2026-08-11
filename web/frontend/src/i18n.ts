@@ -161,7 +161,7 @@ export const translations = {
     txtFormat: "TXT",
     filesProcessedSecurely: "Files are processed securely in real-time. Encryption applies at rest and in transit.",
     minWordsRecommended: "Minimum 50 words recommended.",
-    fetchTermsDirectlyDesc: "Fetch terms directly from web URLs, public registries, or virtual documents.",
+    fetchTermsDirectlyDesc: "Paste any link belonging to a site. We auto-discover its Privacy Policy, Terms, Cookie Policy & EULA and analyze each.",
     recentLabel: "RECENT",
     demosLabel: "DEMOS",
     ratingLabel: "Rating",

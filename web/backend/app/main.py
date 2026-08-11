@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
-from .routers import documents, health, extension
+from .routers import documents, health, extension, site
 
 app = FastAPI(
     title="ClarifyLaw API",
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(documents.router)
 app.include_router(health.router)
 app.include_router(extension.router)
+app.include_router(site.router)
 
 @app.get("/")
 async def root():

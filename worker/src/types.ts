@@ -29,3 +29,9 @@ export interface AnalyzeRequest {
   policyUrls: Record<PolicyType, string | null>;
   forceRefresh?: boolean;
 }
+
+export interface SiteAnalyzeRequest {
+  siteUrl: string;
+  policyUrls?: Partial<Record<PolicyType, string | null>>;
+  forceRefresh?: boolean;
+}

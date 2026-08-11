@@ -9,9 +9,11 @@ import { ClayCard } from './ClayCard';
 import { ClayButton } from './ClayButton';
 import { components } from '../api/types';
 import { getDemoDocuments } from '../api/client';
+import { analyzeSite, hydrateSiteReport, type ExtensionSiteData } from '../api/site';
 import { useDocumentAnalysis } from '../hooks/useDocumentAnalysis';
 import { t } from '../i18n';
 import { saveAnalysisToHistory, getAnalysisHistory, deleteHistoryEntry, type HistoryEntry } from '../utils/analysisHistory';
+import { SiteReportView } from './SiteReportView';
 
 type AnalyzedClause = components['schemas']['AnalyzedClause'];
 
@@ -32,7 +34,6 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     progressPercentage,
     startFileAnalysis,
     startTextAnalysis,
-    startUrlAnalysis,
     startDemoAnalysis,
     loadResult,
     reset: resetAnalysis
@@ -55,6 +56,13 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
   const [pastedText, setPastedText] = useState('');
   const [pastedUrl, setPastedUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Site (multi-policy) analysis state — triggered by pasting a website URL.
+  const [siteReport, setSiteReport] = useState<ExtensionSiteData | null>(null);
+  const [siteAnalyzing, setSiteAnalyzing] = useState(false);
+  const [siteProgress, setSiteProgress] = useState<number | null>(null);
+  const [siteStep, setSiteStep] = useState<string>('');
+  const [siteError, setSiteError] = useState<string | null>(null);
 
   // Toast & Error States
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -160,17 +168,62 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     startTextAnalysis(pastedText);
   };
 
-  const handleUrlSubmit = () => {
+  const handleUrlSubmit = async () => {
     const trimmed = pastedUrl.trim();
     if (!trimmed) return;
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      const errMsg = 'Please enter a valid URL starting with http:// or https://';
+
+    // Accept bare domains / paths (e.g. github.com or github.com/pricing) by
+    // normalizing to https://. Per the spec, any link belonging to a website
+    // triggers auto-discovery (homepage scrape + path guessing) for the
+    // exact subdomain of the pasted URL.
+    let siteUrl = trimmed;
+    if (!/^https?:\/\//i.test(siteUrl)) {
+      siteUrl = 'https://' + siteUrl;
+    }
+    try {
+      // eslint-disable-next-line no-new
+      new URL(siteUrl);
+    } catch {
+      const errMsg = 'Please enter a valid website URL (e.g. github.com or https://github.com/pricing).';
       setUrlError(errMsg);
       triggerToast(errMsg);
       return;
     }
+
     setUrlError(null);
-    startUrlAnalysis(trimmed);
+    setSiteError(null);
+    setSiteReport(null);
+    resetAnalysis(); // clear any single-doc state
+    setSiteAnalyzing(true);
+    setSiteProgress(10);
+    setSiteStep('Discovering legal documents on this site...');
+
+    try {
+      const report = await analyzeSite(siteUrl);
+      setSiteProgress(55);
+      setSiteStep('Analyzing discovered policies with the RAG pipeline...');
+      const data = await hydrateSiteReport(report);
+      if (!data || Object.keys(data.policies || {}).length === 0) {
+        setSiteError('No legal documents (Privacy / Terms / Cookie / EULA) could be found for this site.');
+      } else {
+        setSiteReport(data);
+      }
+      setSiteProgress(100);
+    } catch (err: any) {
+      setSiteError(err.message || 'Failed to analyze this site.');
+    } finally {
+      setSiteAnalyzing(false);
+      setSiteProgress(null);
+    }
+  };
+
+  const resetSiteAnalysis = () => {
+    setSiteReport(null);
+    setSiteAnalyzing(false);
+    setSiteError(null);
+    setSiteStep('');
+    setSiteProgress(null);
+    setPastedUrl('');
   };
 
   // Risk Level Icon Helpers
@@ -327,6 +380,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
             variant="secondary" 
             onClick={() => {
               resetAnalysis();
+              resetSiteAnalysis();
               onBackToHome();
             }} 
             className="p-2.5 sm:p-3! rounded-2xl shrink-0 min-h-10.5"
@@ -341,17 +395,24 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                 </span>
               </div>
             )}
+            {siteReport && (
+              <div className="flex items-center space-x-2">
+                <span className="text-[10px] sm:text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                  • Site Policy Report
+                </span>
+              </div>
+            )}
             <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-brand-ink tracking-tight mt-0.5 leading-snug">
-              {currentDoc ? currentDoc.filename : t('dynamicUpload')}
+              {siteReport ? siteReport.siteName : currentDoc ? currentDoc.filename : t('dynamicUpload')}
             </h1>
           </div>
         </div>
 
-        {currentDoc && (
+        {(currentDoc || siteReport) && (
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <ClayButton 
               variant="primary" 
-              onClick={resetAnalysis}
+              onClick={() => { resetAnalysis(); resetSiteAnalysis(); }}
               icon={<RefreshCw size={15} />}
               className="text-xs px-4 py-2.5 w-full sm:w-auto min-h-10.5 justify-center"
             >
@@ -361,8 +422,57 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
         )}
       </div>
 
-      {/* BEFORE ANALYSIS STATE: Layout inspired by user request */}
-      {!currentDoc ? (
+      {/* SITE ANALYSIS: loading state */}
+      {siteAnalyzing ? (
+        <ClayCard className="flex flex-col items-center justify-center py-16 text-center space-y-6 border-2 border-orange-200/80 bg-white">
+          <div className="relative w-24 h-24">
+            <div className="absolute inset-0 rounded-full border-4 border-orange-100" />
+            <div className="absolute inset-0 rounded-full border-4 border-orange-500 border-t-transparent animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center text-orange-600">
+              <Sparkles className="animate-pulse" size={28} />
+            </div>
+          </div>
+          <div className="space-y-3 max-w-sm">
+            <span className="text-[10px] font-extrabold text-orange-500 uppercase tracking-widest bg-orange-50 border border-orange-100 px-3 py-1 rounded-full">
+              {t('analyzingStage')}
+            </span>
+            <h3 className="font-extrabold text-lg text-brand-ink">{siteStep || t('readingFile')}</h3>
+            {siteProgress !== null && (
+              <div className="space-y-1.5">
+                <div className="w-64 bg-orange-100/70 h-2.5 rounded-full mx-auto overflow-hidden p-0.5 border border-orange-200/40">
+                  <div className="bg-orange-500 h-full rounded-full transition-all duration-300 shadow-sm" style={{ width: `${siteProgress}%` }} />
+                </div>
+                <span className="text-[11px] font-bold text-gray-500">{siteProgress}% Complete</span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={resetSiteAnalysis}
+            className="text-xs text-gray-400 underline hover:text-gray-600 cursor-pointer pt-2"
+          >
+            {t('cancelAnalysis')}
+          </button>
+        </ClayCard>
+      ) : siteError ? (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 bg-red-50 border-2 border-red-200 text-red-900 rounded-2xl text-xs font-bold flex items-center justify-between shadow-xs"
+        >
+          <div className="flex items-center space-x-2">
+            <ShieldAlert size={18} className="text-red-600 shrink-0" />
+            <span>{siteError}</span>
+          </div>
+          <button
+            onClick={resetSiteAnalysis}
+            className="bg-red-200 text-red-900 px-3 py-1 rounded-full text-xs font-bold hover:bg-red-300 cursor-pointer transition-colors"
+          >
+            {t('clear')}
+          </button>
+        </motion.div>
+      ) : siteReport ? (
+        <SiteReportView site={siteReport} onReset={resetSiteAnalysis} />
+      ) : !currentDoc ? (
         <div className="space-y-6">
           {/* Analysis Error Alert */}
           {analysisError && (
@@ -637,7 +747,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                           setPastedUrl(e.target.value);
                           if (urlError) setUrlError(null);
                         }}
-                        placeholder="https://example.com/terms"
+                        placeholder="e.g. github.com or github.com/pricing"
                         className="flex-1 clay-input rounded-full! px-4 py-2.5 text-xs font-mono focus:border-orange-500 text-gray-700 bg-[#FFFDFB] min-h-10.5"
                       />
                       <ClayButton
