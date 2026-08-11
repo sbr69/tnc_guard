@@ -1,5 +1,5 @@
 import { defineBackground } from 'wxt/utils/define-background';
-import { ExtensionPopupData, PolicyType, ExtensionSiteReport } from '../lib/types';
+import type { ExtensionPopupData, PolicyType, ExtensionSiteReport } from '../lib/types';
 
 export default defineBackground(() => {
   console.log('ClarifyLaw Background Worker loaded.');
@@ -46,11 +46,11 @@ export default defineBackground(() => {
   // Handle messages
   browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     if (message.type === 'POLICIES_DETECTED') {
-      const { domain, policies } = message.payload;
+      const { domain, policies } = message.payload as { domain: string; policies: Record<PolicyType, string | null> };
       // Merge with any existing discovered policies for this domain
       const key = `discovered_${domain}`;
       const existing = await browser.storage.local.get(key);
-      const merged = existing[key] || {
+      const merged: Record<PolicyType, string | null> = (existing[key] as Record<PolicyType, string | null>) || {
         privacy: null, tos: null, cookie: null, eula: null
       };
       
@@ -93,7 +93,7 @@ export default defineBackground(() => {
   async function getDiscoveredPolicies(domain: string): Promise<Record<PolicyType, string | null>> {
     const key = `discovered_${domain}`;
     const result = await browser.storage.local.get(key);
-    return result[key] || { privacy: null, tos: null, cookie: null, eula: null };
+    return (result[key] as Record<PolicyType, string | null>) || { privacy: null, tos: null, cookie: null, eula: null };
   }
 
   async function updateBadge(score: number | null, status: 'done' | 'processing' | 'error' | 'no-policies') {

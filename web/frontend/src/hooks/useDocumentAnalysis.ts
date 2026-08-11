@@ -160,6 +160,15 @@ export function useDocumentAnalysis() {
     }
   }, [pollDocument, clearPolling]);
 
+  const loadResult = useCallback((result: DocumentAnalysisResult) => {
+    clearPolling();
+    setDocument(result);
+    setLoading(false);
+    setError(null);
+    setProgressStep('');
+    setProgressPercentage(null);
+  }, [clearPolling]);
+
   const reset = useCallback(() => {
     setDocument(null);
     setLoading(false);
@@ -179,6 +188,7 @@ export function useDocumentAnalysis() {
     startTextAnalysis,
     startUrlAnalysis,
     startDemoAnalysis,
+    loadResult,
     reset
   };
 }

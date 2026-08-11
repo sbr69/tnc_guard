@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   AlertTriangle, CheckCircle, ShieldAlert, 
-  Printer, Copy, Check, Link, Search, 
+  Copy, Check, Search, 
   Sparkles, FileCode, RefreshCw, ChevronRight,
   Globe, ShieldCheck, ArrowLeft
 } from 'lucide-react';
@@ -174,9 +174,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
         })
       );
 
+      const VALID_POLICY_TYPES_INNER: PolicyType[] = ['privacy', 'tos', 'cookie', 'eula'];
       const hydratedPolicies: Record<PolicyType, ExtensionPolicyData> = {} as any;
       for (const [ptype, policy] of hydratedResults) {
-        hydratedPolicies[ptype] = policy;
+        if (VALID_POLICY_TYPES_INNER.includes(ptype as PolicyType)) {
+          const validKey = ptype as PolicyType;
+          hydratedPolicies[validKey] = policy;
+        }
       }
       
       setLiveData({
@@ -189,11 +193,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
       
       setScannedDomains(prev => prev.includes(domain) ? prev : [...prev, domain]);
 
-      const availableTabs = Object.keys(hydratedPolicies) as PolicyType[];
+      const availableTabs = (Object.keys(hydratedPolicies) as PolicyType[]).filter(k => VALID_POLICY_TYPES.includes(k));
       if (availableTabs.length > 0) {
-        setActiveTab(availableTabs[0]);
-        if (hydratedPolicies[availableTabs[0]]?.clauses?.length > 0) {
-          setSelectedClause(hydratedPolicies[availableTabs[0]].clauses[0]);
+        const firstTab = availableTabs[0];
+        setActiveTab(firstTab);
+        if (hydratedPolicies[firstTab]?.clauses?.length > 0) {
+          setSelectedClause(hydratedPolicies[firstTab].clauses[0]);
         }
       }
       
@@ -211,8 +216,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
     setSelectedClause(null);
   };
 
+  const VALID_POLICY_TYPES: PolicyType[] = ['privacy', 'tos', 'cookie', 'eula'];
   const currentSite = liveData;
-  const currentPolicy = currentSite && currentSite.policies ? (currentSite.policies[activeTab] ?? Object.values(currentSite.policies).find(Boolean)) : null;
+  const safeActiveTab = VALID_POLICY_TYPES.includes(activeTab) ? activeTab : null;
+  const currentPolicy = currentSite && currentSite.policies && safeActiveTab
+    ? (currentSite.policies[safeActiveTab] ?? Object.values(currentSite.policies).find(Boolean))
+    : null;
 
   // Automatically select first clause when active policy tab changes
   useEffect(() => {
@@ -296,7 +305,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
             <ClayButton 
               variant="secondary" 
               onClick={onBackToHome} 
-              className="p-2.5 sm:p-3! rounded-2xl shrink-0 min-h-[42px]"
+              className="p-2.5 sm:p-3! rounded-2xl shrink-0 min-h-10.5"
             >
               <ArrowLeft size={18} />
             </ClayButton>
@@ -324,9 +333,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
               variant="primary" 
               onClick={resetReport}
               icon={<RefreshCw size={15} />}
-              className="text-xs px-4 py-2.5 w-full sm:w-auto min-h-[42px] justify-center"
+              className="text-xs px-4 py-2.5 w-full sm:w-auto min-h-10.5 justify-center"
             >
-              Scan New Domain
+              {t('scanNewDomain')}
             </ClayButton>
           </div>
         )}
@@ -394,7 +403,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                   ) : (
                     <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
                   )}
-                  <span className={scanProgress >= 25 ? "text-gray-800 font-bold" : ""}>Fetching site policies</span>
+                  <span className={scanProgress >= 25 ? "text-gray-800 font-bold" : ""}>{t('fetchingSitePolicies')}</span>
                 </div>
 
                 <div className="flex items-center space-x-1.5">
@@ -405,7 +414,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                   ) : (
                     <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
                   )}
-                  <span className={scanProgress >= 50 ? "text-gray-800 font-bold" : ""}>Parsing Privacy & Terms</span>
+                  <span className={scanProgress >= 50 ? "text-gray-800 font-bold" : ""}>{t('parsingPrivacy')}</span>
                 </div>
 
                 <div className="flex items-center space-x-1.5">
@@ -416,7 +425,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                   ) : (
                     <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
                   )}
-                  <span className={scanProgress >= 75 ? "text-gray-800 font-bold" : ""}>RAG Baseline comparison</span>
+                  <span className={scanProgress >= 75 ? "text-gray-800 font-bold" : ""}>{t('ragBaselineComparison')}</span>
                 </div>
 
                 <div className="flex items-center space-x-1.5">
@@ -427,7 +436,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                   ) : (
                     <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
                   )}
-                  <span className={scanProgress >= 100 ? "text-gray-800 font-bold" : ""}>Generating Risk Score</span>
+                  <span className={scanProgress >= 100 ? "text-gray-800 font-bold" : ""}>{t('generatingRiskScore')}</span>
                 </div>
               </div>
 
@@ -452,14 +461,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                       <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                         <Globe size={15} />
                       </div>
-                      <h3 className="font-extrabold text-sm sm:text-base text-brand-ink">Extension Policy Scanner</h3>
+                      <h3 className="font-extrabold text-sm sm:text-base text-brand-ink">{t('extensionPolicyScanner')}</h3>
                     </div>
 
                     {/* Format badges on top right */}
                     <div className="flex items-center space-x-1 sm:space-x-1.5">
-                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">PRIVACY</span>
-                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">TOS</span>
-                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">EULA</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">{t('privacyTab')}</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">{t('tosTab')}</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">{t('eulaTab')}</span>
                     </div>
                   </div>
 
@@ -467,7 +476,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                   <div className="my-4 sm:my-6 space-y-3.5 sm:space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-[11px] sm:text-xs font-extrabold text-gray-700 uppercase tracking-wider block">
-                        Target Website Domain
+                        {t('targetWebsiteDomain')}
                       </label>
                       <div className="flex items-center space-x-2">
                         <input
@@ -475,7 +484,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                           value={customInputUrl}
                           onChange={(e) => setCustomInputUrl(e.target.value)}
                           placeholder="e.g. github.com or acme-cloud.com"
-                          className="flex-1 clay-input rounded-full! px-4 py-2.5 sm:py-3 text-xs font-mono focus:border-orange-500 text-gray-800 bg-[#FFFDFB] min-h-[42px]"
+                          className="flex-1 clay-input rounded-full! px-4 py-2.5 sm:py-3 text-xs font-mono focus:border-orange-500 text-gray-800 bg-[#FFFDFB] min-h-10.5"
                         />
                         <ClayButton
                           variant="primary"
@@ -488,7 +497,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                             }
                           }}
                           disabled={!customInputUrl.trim() || isScanning}
-                          className="p-2.5! rounded-full! shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="p-2.5! rounded-full! shrink-0 min-w-11 min-h-11 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           <ChevronRight size={18} />
                         </ClayButton>
@@ -498,7 +507,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                     {/* Preset Quick Scan Pills */}
                     <div className="space-y-2 pt-1">
                       <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest block">
-                        Quick Scan Presets
+                        {t('quickScanPresets')}
                       </span>
                       <div className="flex flex-wrap gap-2">
                         {['acme-cloud.com', 'github.com', 'notion.so', 'figma.com'].map((dom) => (
@@ -509,7 +518,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                               setSelectedDomain(dom);
                               fetchLiveReport(dom);
                             }}
-                            className="px-3 py-1.5 rounded-full text-xs font-bold bg-orange-50/70 hover:bg-orange-100 text-brand-ink border border-orange-200/60 transition-all cursor-pointer flex items-center space-x-1.5 min-h-[36px]"
+                            className="px-3 py-1.5 rounded-full text-xs font-bold bg-orange-50/70 hover:bg-orange-100 text-brand-ink border border-orange-200/60 transition-all cursor-pointer flex items-center space-x-1.5 min-h-9"
                           >
                             <Globe size={12} className="text-orange-500 shrink-0" />
                             <span>{dom}</span>
@@ -532,7 +541,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                         const target = customInputUrl.trim() ? customInputUrl.trim().replace(/^https?:\/\//, '').split('/')[0] : selectedDomain;
                         fetchLiveReport(target);
                       }}
-                      className="px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer w-full sm:w-auto min-h-[44px] justify-center"
+                      className="px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer w-full sm:w-auto min-h-11 justify-center"
                     >
                       <span>{t('simulateExtensionScan')}</span>
                     </button>
@@ -550,7 +559,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                     </div>
 
                     <p className="text-xs text-gray-600 leading-relaxed">
-                      ClarifyLaw automatically intercepts and indexes website Privacy Policies, ToS, and EULAs in real-time as you browse.
+                      {t('interceptsDesc')}
                     </p>
 
                     <div className="space-y-2 pt-2">
@@ -564,7 +573,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                       <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 flex items-start space-x-2.5">
                         <CheckCircle size={16} className="text-emerald-500 shrink-0 mt-0.5" />
                         <span className="text-[11px] text-emerald-900 font-medium leading-normal">
-                          Matches provisions against RAG Industry Baseline Standards automatically.
+                          {t('matchesProvisionsDesc')}
                         </span>
                       </div>
                     </div>
@@ -572,7 +581,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
 
                   <div className="pt-2 border-t border-orange-100/40">
                     <span className="text-[10px] text-gray-400 font-semibold block">
-                      Powered by ClarifyLaw High-Speed RAG Engine
+                      {t('poweredByRAG')}
                     </span>
                   </div>
                 </ClayCard>
@@ -582,7 +591,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
               {scannedDomains.length > 0 && (
                 <div className="bg-white/90 border-2 border-orange-100 rounded-2xl p-3 sm:p-3.5 px-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-5 shadow-xs">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0">
-                    SCANNED DOMAINS
+                    {t('scannedDomainsLabel')}
                   </span>
 
                   <div className="flex flex-wrap items-center gap-2.5">
@@ -593,7 +602,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                           setSelectedDomain(dom);
                           fetchLiveReport(dom);
                         }}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold border transition-all flex items-center space-x-2 cursor-pointer shadow-2xs min-h-[36px] ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold border transition-all flex items-center space-x-2 cursor-pointer shadow-2xs min-h-9 ${
                           selectedDomain === dom 
                             ? 'bg-orange-500 text-white border-orange-600' 
                             : 'bg-orange-50/70 hover:bg-orange-100 text-brand-ink border-orange-200/60'
@@ -636,7 +645,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                     }`}>
                       {currentSite.overallScore}
                     </span>
-                    <span className="text-[9px] uppercase font-bold text-gray-400 mt-0.5">out of 10</span>
+                    <span className="text-[9px] uppercase font-bold text-gray-400 mt-0.5">{t('outOf10')}</span>
                   </div>
                 </div>
 
@@ -661,7 +670,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                   </div>
 
                   <span className="text-xs text-gray-400 font-mono">
-                    Scan Date: {currentSite.scanDate}
+                    {t('scanDateLabel')}{currentSite.scanDate}
                   </span>
                 </div>
 
@@ -673,7 +682,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                 <div className="grid grid-cols-3 gap-3 pt-1">
                   <div className="bg-red-50/80 p-3 rounded-2xl border border-red-100 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-extrabold text-red-700 uppercase tracking-wider block">High Risk Terms</span>
+                      <span className="text-[10px] font-extrabold text-red-700 uppercase tracking-wider block">{t('highRiskTerms')}</span>
                       <span className="text-xl font-black text-red-800">{highRiskCount}</span>
                     </div>
                     <ShieldAlert size={22} className="text-red-500 opacity-80" />
@@ -681,7 +690,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
 
                   <div className="bg-amber-50/80 p-3 rounded-2xl border border-amber-100 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider block">Caution Terms</span>
+                      <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider block">{t('cautionTerms')}</span>
                       <span className="text-xl font-black text-amber-900">{cautionCount}</span>
                     </div>
                     <AlertTriangle size={22} className="text-amber-500 opacity-80" />
@@ -689,7 +698,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
 
                   <div className="bg-emerald-50/80 p-3 rounded-2xl border border-emerald-100 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">Safe Standard</span>
+                      <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">{t('safeStandard')}</span>
                       <span className="text-xl font-black text-emerald-900">{safeCount}</span>
                     </div>
                     <CheckCircle size={22} className="text-emerald-500 opacity-80" />
@@ -709,15 +718,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                   key={id}
                   onClick={() => setActiveTab(id as PolicyType)}
                   className={`
-                    flex items-center space-x-2.5 px-5 py-3 rounded-2xl font-extrabold text-xs transition-all duration-200 cursor-pointer whitespace-nowrap
+                    flex items-center space-x-2.5 px-5 py-3 rounded-2xl font-bold text-sm transition-all duration-200 cursor-pointer whitespace-nowrap
                     ${isActive 
-                      ? 'bg-orange-500 text-white shadow-sm scale-[1.01]' 
-                      : 'bg-white text-gray-600 border border-orange-100 hover:border-orange-300 hover:bg-orange-50/50'
+                      ? 'bg-orange-500 text-white shadow-[0_4px_12px_rgba(249,115,22,0.3),inset_0_1.5px_2px_rgba(255,255,255,0.4)] scale-[1.02]' 
+                      : 'bg-white text-gray-600 border border-orange-100 hover:border-orange-300 hover:bg-orange-50/50 shadow-sm'
                     }
                   `}
                 >
                   <span className="capitalize">{policy.title}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
                     isActive ? 'bg-white/20 text-white' : 'bg-orange-100 text-orange-800'
                   }`}>
                     {policy.score}/10
@@ -734,26 +743,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
             <div className="lg:col-span-4 space-y-4">
               
               {/* Search & Filter Toolbar */}
-              <ClayCard className="p-4 border border-orange-100 bg-[#FFFDFB] space-y-3">
+              <ClayCard className="p-4 border-2 border-orange-100/80 bg-white space-y-3.5">
                 
                 {/* Search Input */}
                 <div className="relative">
-                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder={t('searchClausesPlaceholder')}
-                    className="w-full clay-input pl-9 pr-4 py-2 text-xs focus:border-orange-500 text-gray-700"
+                    className="w-full clay-input rounded-xl! pl-8 pr-3 py-2 text-xs focus:border-orange-500 text-gray-800 bg-[#FFFDFB]"
                   />
-                  {searchQuery && (
-                    <button 
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 hover:text-gray-600 cursor-pointer"
-                    >
-                      ×
-                    </button>
-                  )}
                 </div>
 
                 {/* Risk Flags summary if present */}
@@ -777,7 +778,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
 
                 {/* Risk Severity Filters */}
                 <div className="space-y-1.5 pt-1">
-                  <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">Risk Severity</span>
+                  <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">{t('riskSeverity')}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {[
                       { key: 'all', label: 'All', count: currentPolicy?.clauses?.length || 0 },
@@ -809,13 +810,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                 </div>
 
                 <div className="flex items-center justify-between pt-1 border-t border-orange-100 text-[10px] text-gray-400 font-semibold">
-                  <span>Showing {filteredClauses.length} clauses</span>
+                  <span>{t('showing')}{filteredClauses.length} items</span>
                   <span>{currentPolicy?.title}</span>
                 </div>
               </ClayCard>
 
               {/* Scrollable Clause List */}
-              <div className="space-y-2.5 max-h-[560px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-140 overflow-y-auto pr-1">
                 {filteredClauses.length === 0 ? (
                   <div className="text-center py-12 text-xs font-semibold text-gray-400 bg-white rounded-2xl border border-orange-100 p-6">
                     {t('noClausesMatchFilter')}
@@ -958,7 +959,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                             onClick={() => handleCopyText(selectedClause.originalText, 'orig')}
                           >
                             {copiedId === 'orig' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                            <span className="ml-1.5">Copy Original</span>
+                            <span className="ml-1.5">{t('copyOriginal')}</span>
                           </ClayButton>
                         </div>
                       </ClayCard>
@@ -972,7 +973,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                               <h3 className="font-bold text-xs text-orange-800 uppercase tracking-widest">{t('plainEnglishSummary')}</h3>
                             </div>
                             <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                              Plain English
+                              {t('plainEnglishSummary')}
                             </span>
                           </div>
 
@@ -990,7 +991,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                             onClick={() => handleCopyText(selectedClause.simplifiedText, 'simp')}
                           >
                             {copiedId === 'simp' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                            <span className="ml-1.5">Copy Summary</span>
+                            <span className="ml-1.5">{t('copySummary')}</span>
                           </ClayButton>
                         </div>
                       </ClayCard>
@@ -1007,7 +1008,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                           onClick={() => handleCopyText(selectedClause.originalText, 'orig')}
                         >
                           {copiedId === 'orig' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                          <span className="ml-1.5">Copy</span>
+                          <span className="ml-1.5">{t('copy')}</span>
                         </ClayButton>
                       </div>
 
@@ -1027,7 +1028,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                           onClick={() => handleCopyText(selectedClause.simplifiedText, 'simp')}
                         >
                           {copiedId === 'simp' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                          <span className="ml-1.5">Copy</span>
+                          <span className="ml-1.5">{t('copy')}</span>
                         </ClayButton>
                       </div>
 

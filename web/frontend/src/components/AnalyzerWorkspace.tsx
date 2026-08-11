@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Upload, FileText, ArrowLeft, AlertTriangle, CheckCircle, 
-  ShieldAlert, Printer, Copy, Check, Link, Search, 
-  Sparkles, FileCode, RefreshCw, ChevronRight
+  ShieldAlert, Copy, Check, Link, Search, 
+  Sparkles, FileCode, RefreshCw, ChevronRight, Clock, X
 } from 'lucide-react';
 import { ClayCard } from './ClayCard';
 import { ClayButton } from './ClayButton';
@@ -11,6 +11,7 @@ import { components } from '../api/types';
 import { getDemoDocuments } from '../api/client';
 import { useDocumentAnalysis } from '../hooks/useDocumentAnalysis';
 import { t } from '../i18n';
+import { saveAnalysisToHistory, getAnalysisHistory, deleteHistoryEntry, type HistoryEntry } from '../utils/analysisHistory';
 
 type AnalyzedClause = components['schemas']['AnalyzedClause'];
 
@@ -33,6 +34,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     startTextAnalysis,
     startUrlAnalysis,
     startDemoAnalysis,
+    loadResult,
     reset: resetAnalysis
   } = useDocumentAnalysis();
 
@@ -62,6 +64,12 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
   // Demo Documents list
   const [demoDocs, setDemoDocs] = useState<any[]>([]);
 
+  // History state
+  const [analysisHistory, setAnalysisHistory] = useState<HistoryEntry[]>([]);
+
+  // Track whether the current doc was loaded from history or is a demo (skip re-saving)
+  const skipNextSaveRef = useRef(false);
+
   // Load demo documents on mount
   useEffect(() => {
     async function fetchDemos() {
@@ -74,6 +82,23 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     }
     fetchDemos();
   }, []);
+
+  // Load history from IndexedDB on mount
+  useEffect(() => {
+    getAnalysisHistory().then(setAnalysisHistory).catch(console.warn);
+  }, []);
+
+  // Save to history whenever a new analysis result lands (skip demos and history reloads)
+  useEffect(() => {
+    if (!currentDoc) return;
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    saveAnalysisToHistory(currentDoc).then(() => {
+      getAnalysisHistory().then(setAnalysisHistory).catch(console.warn);
+    });
+  }, [currentDoc?.id]);
 
   // Trigger demo document parsing if initialDocId is provided
   useEffect(() => {
@@ -304,7 +329,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
               resetAnalysis();
               onBackToHome();
             }} 
-            className="p-2.5 sm:p-3! rounded-2xl shrink-0 min-h-[42px]"
+            className="p-2.5 sm:p-3! rounded-2xl shrink-0 min-h-10.5"
           >
             <ArrowLeft size={18} />
           </ClayButton>
@@ -328,9 +353,9 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
               variant="primary" 
               onClick={resetAnalysis}
               icon={<RefreshCw size={15} />}
-              className="text-xs px-4 py-2.5 w-full sm:w-auto min-h-[42px] justify-center"
+              className="text-xs px-4 py-2.5 w-full sm:w-auto min-h-10.5 justify-center"
             >
-              Analyze New
+              {t('analyzeNew')}
             </ClayButton>
           </div>
         )}
@@ -400,7 +425,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   ) : (
                     <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
                   )}
-                  <span className={(progressPercentage ?? 0) >= 25 ? "text-gray-800 font-bold" : ""}>Parsing structure</span>
+                  <span className={(progressPercentage ?? 0) >= 25 ? "text-gray-800 font-bold" : ""}>{t('parsingStructure')}</span>
                 </div>
 
                 {/* Stage 2: Hashing clauses (25-50%) */}
@@ -412,7 +437,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   ) : (
                     <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
                   )}
-                  <span className={(progressPercentage ?? 0) >= 50 ? "text-gray-800 font-bold" : ""}>Hashing clauses</span>
+                  <span className={(progressPercentage ?? 0) >= 50 ? "text-gray-800 font-bold" : ""}>{t('hashingClauses')}</span>
                 </div>
 
                 {/* Stage 3: RAG Standard match (50-75%) */}
@@ -424,7 +449,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   ) : (
                     <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
                   )}
-                  <span className={(progressPercentage ?? 0) >= 75 ? "text-gray-800 font-bold" : ""}>RAG Standard match</span>
+                  <span className={(progressPercentage ?? 0) >= 75 ? "text-gray-800 font-bold" : ""}>{t('ragMatch')}</span>
                 </div>
 
                 {/* Stage 4: Risk scoring (75-100%) */}
@@ -436,7 +461,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   ) : (
                     <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
                   )}
-                  <span className={(progressPercentage ?? 0) >= 100 ? "text-gray-800 font-bold" : ""}>Risk scoring</span>
+                  <span className={(progressPercentage ?? 0) >= 100 ? "text-gray-800 font-bold" : ""}>{t('riskScoring')}</span>
                 </div>
               </div>
 
@@ -466,9 +491,9 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
 
                     {/* Format badges on top right */}
                     <div className="flex items-center space-x-1 sm:space-x-1.5">
-                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">PDF</span>
-                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">DOCX</span>
-                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">TXT</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">{t('pdfFormat')}</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">{t('docxFormat')}</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">{t('txtFormat')}</span>
                     </div>
                   </div>
 
@@ -508,7 +533,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                     {stagedFile ? (
                       <div className="flex items-center space-x-2 bg-orange-100/80 text-orange-950 px-3.5 py-1.5 rounded-full border border-orange-200 text-xs font-bold max-w-full">
                         <FileText size={14} className="text-orange-600 shrink-0" />
-                        <span className="truncate max-w-[180px] sm:max-w-[200px]">{stagedFile.name}</span>
+                        <span className="truncate max-w-45 sm:max-w-50">{stagedFile.name}</span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -524,7 +549,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                       /* Black Pill Browse Button */
                       <button
                         type="button"
-                        className="mt-1 px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer min-h-[42px] w-full sm:w-auto justify-center"
+                        className="mt-1 px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer min-h-10.5 w-full sm:w-auto justify-center"
                       >
                         <span>{t('browseFiles')}</span>
                       </button>
@@ -534,7 +559,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   {/* Bottom Footer Row */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-2 border-t border-orange-100/50">
                     <p className="text-[11px] text-gray-400 leading-relaxed max-w-xs">
-                      Files are processed securely in real-time. Encryption applies at rest and in transit.
+                      {t('filesProcessedSecurely')}
                     </p>
 
                     <ClayButton
@@ -547,7 +572,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                         }
                       }}
                       disabled={!stagedFile || isAnalyzing}
-                      className="text-xs px-6 py-3 w-full sm:w-auto shadow-md disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px] justify-center"
+                      className="text-xs px-6 py-3 w-full sm:w-auto shadow-md disabled:opacity-40 disabled:cursor-not-allowed min-h-11 justify-center"
                     >
                       {t('analyzeAgreement')}
                     </ClayButton>
@@ -582,12 +607,12 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-orange-100/40 mt-2">
-                      <span className="text-[10px] text-gray-400 font-semibold">Minimum 50 words recommended.</span>
+                      <span className="text-[10px] text-gray-400 font-semibold">{t('minWordsRecommended')}</span>
                       <ClayButton
                         variant="primary"
                         onClick={handlePasteSubmit}
                         disabled={!pastedText.trim() || isAnalyzing}
-                        className="text-[11px] px-4 py-2.5 w-full sm:w-auto min-h-[42px] justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="text-[11px] px-4 py-2.5 w-full sm:w-auto min-h-10.5 justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {t('analyzePasted')}
                       </ClayButton>
@@ -613,13 +638,13 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                           if (urlError) setUrlError(null);
                         }}
                         placeholder="https://example.com/terms"
-                        className="flex-1 clay-input rounded-full! px-4 py-2.5 text-xs font-mono focus:border-orange-500 text-gray-700 bg-[#FFFDFB] min-h-[42px]"
+                        className="flex-1 clay-input rounded-full! px-4 py-2.5 text-xs font-mono focus:border-orange-500 text-gray-700 bg-[#FFFDFB] min-h-10.5"
                       />
                       <ClayButton
                         variant="primary"
                         onClick={handleUrlSubmit}
                         disabled={!pastedUrl.trim() || isAnalyzing}
-                        className="p-2.5! rounded-full! shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="p-2.5! rounded-full! shrink-0 min-w-11 min-h-11 flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <ChevronRight size={18} />
                       </ClayButton>
@@ -633,35 +658,94 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                     )}
 
                     <p className="text-[11px] text-gray-400 leading-relaxed pt-0.5">
-                      Fetch terms directly from web URLs, public registries, or virtual documents.
+                      {t('fetchTermsDirectlyDesc')}
                     </p>
                   </ClayCard>
                 </div>
               </div>
 
-              {/* BOTTOM FULL-WIDTH HORIZONTAL STRIP: Recent / Demo Preset Templates */}
-              {demoDocs.length > 0 && (
-                <div className="bg-white/90 border-2 border-orange-100 rounded-2xl p-3.5 px-6 flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-5 shadow-xs">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0">
-                    RECENT / DEMOS
-                  </span>
+              {/* BOTTOM FULL-WIDTH STRIP: History + Demo Presets */}
+              {(analysisHistory.length > 0 || demoDocs.length > 0) && (
+                <div className="bg-white/90 border-2 border-orange-100 rounded-2xl p-3 sm:p-3.5 px-4 sm:px-6 space-y-3 shadow-xs">
 
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    {demoDocs.map((doc) => (
-                      <button
-                        key={doc.id}
-                        onClick={() => {
-                          startDemoAnalysis(doc.id);
-                          triggerToast(t('sampleContractLoaded'));
-                        }}
-                        className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-orange-50/70 hover:bg-orange-100 text-brand-ink border border-orange-200/60 transition-all flex items-center space-x-2 cursor-pointer shadow-2xs"
-                      >
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>{doc.filename || doc.title}</span>
-                        <span className="text-[9px] font-mono text-gray-400 font-bold">({doc.healthScore}%)</span>
-                      </button>
-                    ))}
-                  </div>
+                  {/* Recent Analyses */}
+                  {analysisHistory.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-0 sm:space-x-5">
+                      <div className="flex items-center space-x-1.5 shrink-0">
+                        <Clock size={11} className="text-gray-400" />
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                          {t('recentLabel')}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {analysisHistory.map((entry) => {
+                          const doc = entry.result;
+                          const isHealthy = (doc.healthScore ?? 0) > 60;
+                          return (
+                            <div key={entry.historyId} className="flex items-center">
+                              <button
+                                onClick={() => {
+                                  skipNextSaveRef.current = true;
+                                  loadResult(doc);
+                                }}
+                                className="px-3.5 py-1.5 rounded-l-full text-xs font-extrabold bg-orange-50/70 hover:bg-orange-100 text-brand-ink border border-r-0 border-orange-200/60 transition-all flex items-center space-x-2 cursor-pointer shadow-2xs min-h-8.5"
+                              >
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                  isHealthy ? 'bg-emerald-500' : 'bg-red-400'
+                                }`} />
+                                <span className="max-w-32.5 truncate">{doc.filename || 'Untitled'}</span>
+                                <span className="text-[9px] font-mono text-gray-400 font-bold shrink-0">({doc.healthScore}%)</span>
+                              </button>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await deleteHistoryEntry(entry.historyId);
+                                  setAnalysisHistory(prev => prev.filter(h => h.historyId !== entry.historyId));
+                                }}
+                                title="Remove from history"
+                                className="px-2 py-1.5 rounded-r-full text-[10px] bg-orange-50/70 hover:bg-red-50 hover:text-red-500 text-gray-400 border border-orange-200/60 transition-all cursor-pointer shadow-2xs min-h-8.5 flex items-center"
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Divider when both sections present */}
+                  {analysisHistory.length > 0 && demoDocs.length > 0 && (
+                    <div className="border-t border-orange-100/60" />
+                  )}
+
+                  {/* Demo Presets */}
+                  {demoDocs.length > 0 && (
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-0 sm:space-x-5">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0">
+                        {t('demosLabel')}
+                      </span>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {demoDocs.map((doc) => (
+                          <button
+                            key={doc.id}
+                            onClick={() => {
+                              skipNextSaveRef.current = true;
+                              startDemoAnalysis(doc.id);
+                              triggerToast(t('sampleContractLoaded'));
+                            }}
+                            className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-orange-50/70 hover:bg-orange-100 text-brand-ink border border-orange-200/60 transition-all flex items-center space-x-2 cursor-pointer shadow-2xs min-h-8.5"
+                          >
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                            <span>{doc.filename || doc.title}</span>
+                            <span className="text-[9px] font-mono text-gray-400 font-bold">({doc.healthScore}%)</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -690,7 +774,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                     }`}>
                       {currentDoc.healthScore}%
                     </span>
-                    <span className="text-[9px] uppercase font-bold text-gray-400 mt-0.5">Rating</span>
+                    <span className="text-[9px] uppercase font-bold text-gray-400 mt-0.5">{t('ratingLabel')}</span>
                   </div>
                 </div>
 
@@ -718,7 +802,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   </div>
 
                   <span className="text-xs text-gray-400 font-mono">
-                    Upload Date: {new Date(currentDoc.uploadDate || Date.now()).toLocaleDateString()}
+                    {t('uploadDateLabel')}{new Date(currentDoc.uploadDate || Date.now()).toLocaleDateString()}
                   </span>
                 </div>
 
@@ -734,7 +818,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                 <div className="grid grid-cols-3 gap-3 pt-1">
                   <div className="bg-red-50/80 p-3 rounded-2xl border border-red-100 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-extrabold text-red-700 uppercase tracking-wider block">Risky Gotchas</span>
+                      <span className="text-[10px] font-extrabold text-red-700 uppercase tracking-wider block">{t('riskyGotchas')}</span>
                       <span className="text-xl font-black text-red-800">{riskyCount}</span>
                     </div>
                     <ShieldAlert size={22} className="text-red-500 opacity-80" />
@@ -742,7 +826,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
 
                   <div className="bg-amber-50/80 p-3 rounded-2xl border border-amber-100 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider block">Caution Terms</span>
+                      <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider block">{t('cautionTerms')}</span>
                       <span className="text-xl font-black text-amber-900">{cautionaryCount}</span>
                     </div>
                     <AlertTriangle size={22} className="text-amber-500 opacity-80" />
@@ -750,7 +834,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
 
                   <div className="bg-emerald-50/80 p-3 rounded-2xl border border-emerald-100 flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">Safe Standard</span>
+                      <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">{t('safeStandard')}</span>
                       <span className="text-xl font-black text-emerald-900">{standardCount}</span>
                     </div>
                     <CheckCircle size={22} className="text-emerald-500 opacity-80" />
@@ -791,7 +875,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
 
                 {/* Severity Risk Filters */}
                 <div className="space-y-1.5">
-                  <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">Risk Severity</span>
+                  <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">{t('riskSeverity')}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {[
                       { key: 'all', label: 'All', count: currentDoc.clauses.length },
@@ -829,7 +913,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                     <select
                       value={selectedCategory}
                       onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="w-full bg-white border border-orange-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:border-orange-500 cursor-pointer"
+                      className="w-full clay-input rounded-xl! px-3 py-1.5 text-xs font-semibold text-gray-700 cursor-pointer bg-white"
                     >
                       <option value="all">{t('allCategories')}</option>
                       {categories.map((cat) => (
@@ -842,13 +926,13 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                 )}
 
                 <div className="flex items-center justify-between pt-1 border-t border-orange-100 text-[10px] text-gray-400 font-semibold">
-                  <span>Showing {filteredClauses.length} of {currentDoc.clauses.length} items</span>
+                  <span>{t('showing')}{filteredClauses.length} of {currentDoc.clauses.length} items</span>
                   <span>{t('clauseNavigationHint')}</span>
                 </div>
               </ClayCard>
 
               {/* Scrollable Clause List */}
-              <div className="space-y-2.5 max-h-[560px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-140 overflow-y-auto pr-1">
                 {filteredClauses.length === 0 ? (
                   <div className="text-center py-12 text-xs font-semibold text-gray-400 bg-white rounded-2xl border border-orange-100 p-6">
                     {t('noClausesMatch')}
@@ -974,7 +1058,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                             </div>
                             {selectedClause.sectionLocation && (
                               <span className="text-[10px] font-mono text-gray-400 bg-white px-2 py-0.5 rounded-md border border-orange-100">
-                                Location: {selectedClause.sectionLocation}
+                                {t('locationLabel')}{selectedClause.sectionLocation}
                               </span>
                             )}
                           </div>
@@ -1005,7 +1089,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                               <h3 className="font-bold text-xs text-orange-800 uppercase tracking-widest">{t('simplifiedTranslation')}</h3>
                             </div>
                             <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                              Plain English
+                              {t('plainEnglishSummary')}
                             </span>
                           </div>
 
@@ -1110,7 +1194,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                       {/* Rule Flags if any exist */}
                       {selectedClause.ruleFlags && selectedClause.ruleFlags.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Trigger Flags:</span>
+                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{t('triggerFlags')}</span>
                           {selectedClause.ruleFlags.map((flag, idx) => (
                             <span key={idx} className="text-[10px] font-bold bg-white/70 text-gray-700 px-2 py-0.5 rounded-md border border-gray-200">
                               {flag.replace(/_/g, ' ')}

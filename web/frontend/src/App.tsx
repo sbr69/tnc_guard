@@ -68,7 +68,7 @@ function App() {
         <div className="flex items-center space-x-1 sm:space-x-2 bg-orange-50/70 p-1 sm:p-1.5 rounded-2xl border border-orange-100">
           <button
             onClick={() => navigate('/')}
-            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[36px] ${
+            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-9 ${
               isLanding 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
@@ -80,26 +80,26 @@ function App() {
           
           <button
             onClick={() => navigate('/review')}
-            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[36px] ${
+            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-9 ${
               isReview 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
             }`}
           >
             <FileText size={14} className="shrink-0" />
-            <span>Workspace</span>
+            <span>{t('workspace')}</span>
           </button>
 
           <button
             onClick={() => navigate('/reports')}
-            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[36px] ${
+            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-9 ${
               isReports 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
             }`}
           >
             <Sparkles size={14} className="shrink-0" />
-            <span>Reports</span>
+            <span>{t('reports')}</span>
           </button>
         </div>
 
@@ -123,7 +123,7 @@ function App() {
           onBackToHome={handleBackToHome} 
         />
       ) : (
-        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="text-center"><Sparkles className="w-12 h-12 text-orange-500 animate-pulse mx-auto mb-4" /><h2 className="text-xl font-bold text-gray-800">Loading...</h2></div></div>}>
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="text-center"><Sparkles className="w-12 h-12 text-orange-500 animate-pulse mx-auto mb-4" /><h2 className="text-xl font-bold text-gray-800">{t('loading')}</h2></div></div>}>
           <ReportsView onBackToHome={handleBackToHome} />
         </Suspense>
       )}

@@ -38,7 +38,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         </nav>
 
         <div>
-          <ClayButton variant="primary" onClick={() => onStart()} className="text-xs px-4 py-2 min-h-[40px]">
+          <ClayButton variant="primary" onClick={() => onStart()} className="text-xs px-4 py-2 min-h-10">
             {t('analyzeAgreement')}
           </ClayButton>
         </div>
@@ -65,7 +65,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
               variant="primary" 
               onClick={() => onStart()} 
               icon={<ArrowRight size={18} />}
-              className="w-full sm:w-auto min-h-[44px] justify-center"
+              className="w-full sm:w-auto min-h-11 justify-center"
             >
               {t('analyzeAgreement')}
             </ClayButton>
@@ -289,7 +289,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
           {t('startIdentifying')}
         </p>
         <div className="pt-2 sm:pt-4">
-          <ClayButton variant="primary" onClick={() => onStart()} className="w-full sm:w-auto min-h-[44px] justify-center">
+          <ClayButton variant="primary" onClick={() => onStart()} className="w-full sm:w-auto min-h-11 justify-center">
             {t('analyzeAgreement')}
           </ClayButton>
         </div>
