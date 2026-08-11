@@ -54,56 +54,56 @@ function App() {
   return (
     <div className="bg-brand-bg min-h-screen">
       {/* Global Top Switcher Bar */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-40 px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center space-x-3 cursor-pointer" onClick={handleBackToHome}>
-          <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white clay-inner-ring">
-            <ShieldCheck size={20} />
+      <header className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-0 min-h-14 sm:h-16 flex items-center justify-between gap-2">
+        <div className="flex items-center space-x-2 shrink-0 cursor-pointer" onClick={handleBackToHome}>
+          <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white clay-inner-ring shrink-0">
+            <ShieldCheck size={18} />
           </div>
-          <span className="font-extrabold text-lg text-brand-ink">
+          <span className="font-extrabold text-base sm:text-lg text-brand-ink">
             {t('clarify')}<span className="text-orange-500">{t('law')}</span>
           </span>
         </div>
 
         {/* Global Page Switcher */}
-        <div className="flex items-center space-x-2 bg-orange-50/70 p-1.5 rounded-2xl border border-orange-100">
+        <div className="flex items-center space-x-1 sm:space-x-2 bg-orange-50/70 p-1 sm:p-1.5 rounded-2xl border border-orange-100">
           <button
             onClick={() => navigate('/')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[36px] ${
               isLanding 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
             }`}
           >
-            <Home size={14} />
-            <span>{t('homeNav')}</span>
+            <Home size={14} className="shrink-0" />
+            <span className="hidden sm:inline">{t('homeNav')}</span>
           </button>
           
           <button
             onClick={() => navigate('/review')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[36px] ${
               isReview 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
             }`}
           >
-            <FileText size={14} />
-            <span>{t('documentWorkspaceNav')}</span>
+            <FileText size={14} className="shrink-0" />
+            <span>Workspace</span>
           </button>
 
           <button
             onClick={() => navigate('/reports')}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center space-x-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer min-h-[36px] ${
               isReports 
                 ? 'bg-orange-500 text-white shadow-sm' 
                 : 'text-gray-600 hover:text-orange-600'
             }`}
           >
-            <Sparkles size={14} />
-            <span>{t('extensionReportsNav')}</span>
+            <Sparkles size={14} className="shrink-0" />
+            <span>Reports</span>
           </button>
         </div>
 
-        <div className="hidden sm:block">
+        <div className="hidden md:block">
           <ClayButton 
             variant="primary" 
             className="px-3! py-1.5! text-xs"

@@ -273,7 +273,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
   }, [currentPolicy]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 min-h-screen">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8 min-h-screen">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
@@ -281,50 +281,50 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white text-gray-900 px-5 py-3 rounded-full text-xs font-extrabold shadow-2xl flex items-center space-x-2.5 border border-orange-200"
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white text-gray-900 px-4 sm:px-5 py-2.5 sm:py-3 rounded-full text-xs font-extrabold shadow-2xl flex items-center space-x-2.5 border border-orange-200 max-w-[90vw]"
           >
             <CheckCircle size={15} className="text-emerald-500 shrink-0" />
-            <span className="text-gray-900 font-bold">{toastMessage}</span>
+            <span className="text-gray-900 font-bold truncate">{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 pb-4 border-b border-orange-100/60">
-        <div className="flex items-center space-x-3.5">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 sm:mb-8 gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-orange-100/60">
+        <div className="flex items-center space-x-3 sm:space-x-3.5">
           {onBackToHome && (
             <ClayButton 
               variant="secondary" 
               onClick={onBackToHome} 
-              className="p-3! rounded-2xl"
+              className="p-2.5 sm:p-3! rounded-2xl shrink-0 min-h-[42px]"
             >
               <ArrowLeft size={18} />
             </ClayButton>
           )}
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-[11px] font-extrabold text-orange-600 uppercase tracking-widest bg-orange-100/80 px-2 py-0.5 rounded-md">
+              <span className="text-[10px] sm:text-[11px] font-extrabold text-orange-600 uppercase tracking-widest bg-orange-100/80 px-2 py-0.5 rounded-md">
                 {t('browserExtensionBridge')}
               </span>
               {currentSite && (
-                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                <span className="text-[10px] sm:text-[11px] font-bold text-gray-400 uppercase tracking-wider">
                   • {currentSite.domain}
                 </span>
               )}
             </div>
-            <h1 className="text-2xl md:text-3xl font-black text-brand-ink tracking-tight mt-0.5">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-brand-ink tracking-tight mt-0.5 leading-snug">
               {currentSite ? `${t('legalSummaryReportFor')} ${currentSite.siteName}` : t('extensionReportHeader')}
             </h1>
           </div>
         </div>
 
         {currentSite && (
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <ClayButton 
               variant="primary" 
               onClick={resetReport}
               icon={<RefreshCw size={15} />}
-              className="text-xs px-4 py-2"
+              className="text-xs px-4 py-2.5 w-full sm:w-auto min-h-[42px] justify-center"
             >
               Scan New Domain
             </ClayButton>
@@ -444,29 +444,29 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                 
                 {/* LEFT CARD: Main Domain Scanner Zone (col-span-7) */}
-                <ClayCard className="lg:col-span-7 flex flex-col justify-between p-6 border-2 border-orange-100 bg-white shadow-sm">
+                <ClayCard className="lg:col-span-7 flex flex-col justify-between p-4 sm:p-6 border-2 border-orange-100 bg-white shadow-sm">
                   
                   {/* Top Header Row */}
                   <div className="flex items-center justify-between pb-3 border-b border-orange-100/60">
                     <div className="flex items-center space-x-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                      <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                         <Globe size={15} />
                       </div>
-                      <h3 className="font-extrabold text-base text-brand-ink">Extension Policy Scanner</h3>
+                      <h3 className="font-extrabold text-sm sm:text-base text-brand-ink">Extension Policy Scanner</h3>
                     </div>
 
                     {/* Format badges on top right */}
-                    <div className="flex items-center space-x-1.5">
-                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">PRIVACY</span>
-                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">TOS</span>
-                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">EULA</span>
+                    <div className="flex items-center space-x-1 sm:space-x-1.5">
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">PRIVACY</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">TOS</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">EULA</span>
                     </div>
                   </div>
 
                   {/* Domain Input Area */}
-                  <div className="my-6 space-y-4">
+                  <div className="my-4 sm:my-6 space-y-3.5 sm:space-y-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-extrabold text-gray-700 uppercase tracking-wider block">
+                      <label className="text-[11px] sm:text-xs font-extrabold text-gray-700 uppercase tracking-wider block">
                         Target Website Domain
                       </label>
                       <div className="flex items-center space-x-2">
@@ -475,7 +475,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                           value={customInputUrl}
                           onChange={(e) => setCustomInputUrl(e.target.value)}
                           placeholder="e.g. github.com or acme-cloud.com"
-                          className="flex-1 clay-input rounded-full! px-4 py-3 text-xs font-mono focus:border-orange-500 text-gray-800 bg-[#FFFDFB]"
+                          className="flex-1 clay-input rounded-full! px-4 py-2.5 sm:py-3 text-xs font-mono focus:border-orange-500 text-gray-800 bg-[#FFFDFB] min-h-[42px]"
                         />
                         <ClayButton
                           variant="primary"
@@ -488,7 +488,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                             }
                           }}
                           disabled={!customInputUrl.trim() || isScanning}
-                          className="p-3! rounded-full! shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="p-2.5! rounded-full! shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           <ChevronRight size={18} />
                         </ClayButton>
@@ -509,9 +509,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                               setSelectedDomain(dom);
                               fetchLiveReport(dom);
                             }}
-                            className="px-3 py-1.5 rounded-full text-xs font-bold bg-orange-50/70 hover:bg-orange-100 text-brand-ink border border-orange-200/60 transition-all cursor-pointer flex items-center space-x-1.5"
+                            className="px-3 py-1.5 rounded-full text-xs font-bold bg-orange-50/70 hover:bg-orange-100 text-brand-ink border border-orange-200/60 transition-all cursor-pointer flex items-center space-x-1.5 min-h-[36px]"
                           >
-                            <Globe size={12} className="text-orange-500" />
+                            <Globe size={12} className="text-orange-500 shrink-0" />
                             <span>{dom}</span>
                           </button>
                         ))}
@@ -520,7 +520,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                   </div>
 
                   {/* Bottom Footer Row */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3 border-t border-orange-100/50">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 border-t border-orange-100/50">
                     <p className="text-[11px] text-gray-400 leading-relaxed max-w-xs">
                       {t('extensionSimBanner')}
                     </p>
@@ -532,7 +532,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                         const target = customInputUrl.trim() ? customInputUrl.trim().replace(/^https?:\/\//, '').split('/')[0] : selectedDomain;
                         fetchLiveReport(target);
                       }}
-                      className="px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer"
+                      className="px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer w-full sm:w-auto min-h-[44px] justify-center"
                     >
                       <span>{t('simulateExtensionScan')}</span>
                     </button>
@@ -540,13 +540,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                 </ClayCard>
 
                 {/* RIGHT CARD: Extension Bridge Info Card (col-span-5) */}
-                <ClayCard className="lg:col-span-5 p-6 border-2 border-orange-100 bg-white flex flex-col justify-between space-y-4 shadow-sm">
+                <ClayCard className="lg:col-span-5 p-4 sm:p-6 border-2 border-orange-100 bg-white flex flex-col justify-between space-y-4 shadow-sm">
                   <div className="space-y-3">
                     <div className="flex items-center space-x-2.5 pb-2 border-b border-orange-100/50">
-                      <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                      <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                         <Sparkles size={15} />
                       </div>
-                      <h3 className="font-extrabold text-sm text-brand-ink">{t('browserExtensionBridge')}</h3>
+                      <h3 className="font-extrabold text-xs sm:text-sm text-brand-ink">{t('browserExtensionBridge')}</h3>
                     </div>
 
                     <p className="text-xs text-gray-600 leading-relaxed">
@@ -580,7 +580,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
 
               {/* BOTTOM FULL-WIDTH HORIZONTAL STRIP: Pre-Scanned Domain Gallery */}
               {scannedDomains.length > 0 && (
-                <div className="bg-white/90 border-2 border-orange-100 rounded-2xl p-3.5 px-6 flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-5 shadow-xs">
+                <div className="bg-white/90 border-2 border-orange-100 rounded-2xl p-3 sm:p-3.5 px-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-5 shadow-xs">
                   <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0">
                     SCANNED DOMAINS
                   </span>
@@ -593,7 +593,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ onBackToHome }) => {
                           setSelectedDomain(dom);
                           fetchLiveReport(dom);
                         }}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold border transition-all flex items-center space-x-2 cursor-pointer shadow-2xs ${
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold border transition-all flex items-center space-x-2 cursor-pointer shadow-2xs min-h-[36px] ${
                           selectedDomain === dom 
                             ? 'bg-orange-500 text-white border-orange-600' 
                             : 'bg-orange-50/70 hover:bg-orange-100 text-brand-ink border-orange-200/60'

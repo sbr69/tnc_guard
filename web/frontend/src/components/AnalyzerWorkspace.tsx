@@ -279,7 +279,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
 
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 min-h-screen">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-8 min-h-screen">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
@@ -287,48 +287,48 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white text-gray-900 px-5 py-3 rounded-full text-xs font-extrabold shadow-2xl flex items-center space-x-2.5 border border-orange-200"
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white text-gray-900 px-4 sm:px-5 py-2.5 sm:py-3 rounded-full text-xs font-extrabold shadow-2xl flex items-center space-x-2.5 border border-orange-200 max-w-[90vw]"
           >
             <AlertTriangle size={15} className="text-amber-500 shrink-0" />
-            <span className="text-gray-900 font-bold">{toastMessage}</span>
+            <span className="text-gray-900 font-bold truncate">{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 pb-4 border-b border-orange-100/60">
-        <div className="flex items-center space-x-3.5">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-5 sm:mb-8 gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-orange-100/60">
+        <div className="flex items-center space-x-3 sm:space-x-3.5">
           <ClayButton 
             variant="secondary" 
             onClick={() => {
               resetAnalysis();
               onBackToHome();
             }} 
-            className="p-3! rounded-2xl"
+            className="p-2.5 sm:p-3! rounded-2xl shrink-0 min-h-[42px]"
           >
             <ArrowLeft size={18} />
           </ClayButton>
           <div>
             {currentDoc && (
               <div className="flex items-center space-x-2">
-                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                <span className="text-[10px] sm:text-[11px] font-bold text-gray-400 uppercase tracking-wider">
                   • {currentDoc.clauses.length} Clauses Analyzed
                 </span>
               </div>
             )}
-            <h1 className="text-2xl md:text-3xl font-black text-brand-ink tracking-tight mt-0.5">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-brand-ink tracking-tight mt-0.5 leading-snug">
               {currentDoc ? currentDoc.filename : t('dynamicUpload')}
             </h1>
           </div>
         </div>
 
         {currentDoc && (
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <ClayButton 
               variant="primary" 
               onClick={resetAnalysis}
               icon={<RefreshCw size={15} />}
-              className="text-xs px-4 py-2"
+              className="text-xs px-4 py-2.5 w-full sm:w-auto min-h-[42px] justify-center"
             >
               Analyze New
             </ClayButton>
@@ -453,22 +453,22 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                 
                 {/* LEFT CARD: Main Upload Zone (col-span-7) */}
-                <ClayCard className="lg:col-span-7 flex flex-col justify-between p-6 border-2 border-orange-100 bg-white shadow-sm">
+                <ClayCard className="lg:col-span-7 flex flex-col justify-between p-4 sm:p-6 border-2 border-orange-100 bg-white shadow-sm">
                   
                   {/* Top Header Row */}
                   <div className="flex items-center justify-between pb-3 border-b border-orange-100/60">
                     <div className="flex items-center space-x-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                      <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                         <Upload size={15} />
                       </div>
-                      <h3 className="font-extrabold text-base text-brand-ink">{t('chooseAgreement')}</h3>
+                      <h3 className="font-extrabold text-sm sm:text-base text-brand-ink">{t('chooseAgreement')}</h3>
                     </div>
 
                     {/* Format badges on top right */}
-                    <div className="flex items-center space-x-1.5">
-                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">PDF</span>
-                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">DOCX</span>
-                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">TXT</span>
+                    <div className="flex items-center space-x-1 sm:space-x-1.5">
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">PDF</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">DOCX</span>
+                      <span className="text-[9px] sm:text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">TXT</span>
                     </div>
                   </div>
 
@@ -479,7 +479,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                     onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
                     className={`
-                      my-5 cursor-pointer text-center py-12 px-6 rounded-2xl border-2 border-dashed
+                      my-3.5 sm:my-5 cursor-pointer text-center py-8 sm:py-12 px-4 sm:px-6 rounded-2xl border-2 border-dashed
                       transition-all duration-200 flex flex-col items-center justify-center space-y-3.5
                       ${isDragging 
                         ? 'border-orange-500 bg-orange-50/70 scale-[1.01]' 
@@ -495,20 +495,20 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                       className="hidden" 
                     />
 
-                    <div className="w-12 h-12 rounded-full bg-orange-100/70 text-orange-600 flex items-center justify-center shadow-xs">
-                      <Upload size={22} />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-orange-100/70 text-orange-600 flex items-center justify-center shadow-xs">
+                      <Upload size={20} />
                     </div>
 
                     <div className="space-y-1 max-w-sm">
-                      <h4 className="text-base font-extrabold text-brand-ink leading-snug">{t('dragDropFile')}</h4>
-                      <p className="text-xs text-gray-400">{t('fileLimits')}</p>
+                      <h4 className="text-sm sm:text-base font-extrabold text-brand-ink leading-snug">{t('dragDropFile')}</h4>
+                      <p className="text-[11px] sm:text-xs text-gray-400">{t('fileLimits')}</p>
                     </div>
 
                     {/* Staged File Badge or Browse Button */}
                     {stagedFile ? (
-                      <div className="flex items-center space-x-2 bg-orange-100/80 text-orange-950 px-3.5 py-1.5 rounded-full border border-orange-200 text-xs font-bold">
+                      <div className="flex items-center space-x-2 bg-orange-100/80 text-orange-950 px-3.5 py-1.5 rounded-full border border-orange-200 text-xs font-bold max-w-full">
                         <FileText size={14} className="text-orange-600 shrink-0" />
-                        <span className="truncate max-w-[200px]">{stagedFile.name}</span>
+                        <span className="truncate max-w-[180px] sm:max-w-[200px]">{stagedFile.name}</span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -524,7 +524,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                       /* Black Pill Browse Button */
                       <button
                         type="button"
-                        className="mt-1 px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer"
+                        className="mt-1 px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer min-h-[42px] w-full sm:w-auto justify-center"
                       >
                         <span>{t('browseFiles')}</span>
                       </button>
@@ -532,7 +532,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   </div>
 
                   {/* Bottom Footer Row */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2 border-t border-orange-100/50">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-2 border-t border-orange-100/50">
                     <p className="text-[11px] text-gray-400 leading-relaxed max-w-xs">
                       Files are processed securely in real-time. Encryption applies at rest and in transit.
                     </p>
@@ -547,7 +547,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                         }
                       }}
                       disabled={!stagedFile || isAnalyzing}
-                      className="text-xs px-6 py-3 w-full sm:w-auto shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="text-xs px-6 py-3 w-full sm:w-auto shadow-md disabled:opacity-40 disabled:cursor-not-allowed min-h-[44px] justify-center"
                     >
                       {t('analyzeAgreement')}
                     </ClayButton>
@@ -555,39 +555,39 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                 </ClayCard>
 
                 {/* RIGHT COLUMN: Stacked Paste Text + Web URL Cards (col-span-5) */}
-                <div className="lg:col-span-5 space-y-6 flex flex-col justify-between">
+                <div className="lg:col-span-5 space-y-4 sm:space-y-6 flex flex-col justify-between">
                   
                   {/* Top Right Card: Paste Raw Text */}
-                  <ClayCard className="p-5 border-2 border-orange-100 bg-white space-y-3.5 flex-1 flex flex-col justify-between shadow-sm">
+                  <ClayCard className="p-4 sm:p-5 border-2 border-orange-100 bg-white space-y-3 sm:space-y-3.5 flex-1 flex flex-col justify-between shadow-sm">
                     <div>
                       <div className="flex items-center justify-between pb-2 border-b border-orange-100/50">
                         <div className="flex items-center space-x-2.5">
-                          <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                          <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                             <FileText size={15} />
                           </div>
-                          <h3 className="font-extrabold text-sm text-brand-ink">{t('pasteAgreement')}</h3>
+                          <h3 className="font-extrabold text-xs sm:text-sm text-brand-ink">{t('pasteAgreement')}</h3>
                         </div>
                         <span className="text-[10px] font-mono text-gray-400 font-bold">{pastedText.length} CHARS</span>
                       </div>
 
-                      <div className="relative mt-3">
+                      <div className="relative mt-2.5 sm:mt-3">
                         <textarea
                           value={pastedText}
                           onChange={(e) => setPastedText(e.target.value)}
                           placeholder="Paste contract clauses or agreement sections for targeted risk assessment..."
                           rows={4}
-                          className="w-full clay-input rounded-2xl! p-3.5 text-xs resize-none font-mono focus:border-orange-500 text-gray-700 leading-relaxed bg-[#FFFDFB]"
+                          className="w-full clay-input rounded-2xl! p-3 text-xs resize-none font-mono focus:border-orange-500 text-gray-700 leading-relaxed bg-[#FFFDFB]"
                         />
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-orange-100/40 mt-2">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-orange-100/40 mt-2">
                       <span className="text-[10px] text-gray-400 font-semibold">Minimum 50 words recommended.</span>
                       <ClayButton
                         variant="primary"
                         onClick={handlePasteSubmit}
                         disabled={!pastedText.trim() || isAnalyzing}
-                        className="text-[11px] px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="text-[11px] px-4 py-2.5 w-full sm:w-auto min-h-[42px] justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {t('analyzePasted')}
                       </ClayButton>
@@ -595,12 +595,12 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   </ClayCard>
 
                   {/* Bottom Right Card: Web URL Input */}
-                  <ClayCard className="p-5 border-2 border-orange-100 bg-white space-y-3 shadow-sm">
+                  <ClayCard className="p-4 sm:p-5 border-2 border-orange-100 bg-white space-y-3 shadow-sm">
                     <div className="flex items-center space-x-2.5 pb-2 border-b border-orange-100/50">
-                      <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                      <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                         <Link size={15} />
                       </div>
-                      <h3 className="font-extrabold text-sm text-brand-ink">{t('pasteWebsiteUrl')}</h3>
+                      <h3 className="font-extrabold text-xs sm:text-sm text-brand-ink">{t('pasteWebsiteUrl')}</h3>
                     </div>
 
                     {/* URL Input Row with Right Arrow Circle Button */}
@@ -613,13 +613,13 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                           if (urlError) setUrlError(null);
                         }}
                         placeholder="https://example.com/terms"
-                        className="flex-1 clay-input rounded-full! px-4 py-2.5 text-xs font-mono focus:border-orange-500 text-gray-700 bg-[#FFFDFB]"
+                        className="flex-1 clay-input rounded-full! px-4 py-2.5 text-xs font-mono focus:border-orange-500 text-gray-700 bg-[#FFFDFB] min-h-[42px]"
                       />
                       <ClayButton
                         variant="primary"
                         onClick={handleUrlSubmit}
                         disabled={!pastedUrl.trim() || isAnalyzing}
-                        className="p-2.5! rounded-full! shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="p-2.5! rounded-full! shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <ChevronRight size={18} />
                       </ClayButton>
