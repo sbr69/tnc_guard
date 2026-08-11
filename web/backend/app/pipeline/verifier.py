@@ -2,13 +2,18 @@ import json
 from ..models.clause import AnalyzedClause, RiskLevel
 from ..services.gemini import generate_content_with_retry
 
+VERIFICATION_CONFIDENCE_THRESHOLD = 0.7
+
 def self_verify_risks(clauses: list[AnalyzedClause]) -> list[AnalyzedClause]:
-    """Filters hallucinated risks using a second LLM pass."""
-    flagged_clauses = [c for c in clauses if c.risk_level in (RiskLevel.RISKY, RiskLevel.CAUTIONARY)]
+    flagged_clauses = [
+        c for c in clauses
+        if c.risk_level in (RiskLevel.RISKY, RiskLevel.CAUTIONARY)
+        and c.confidence < VERIFICATION_CONFIDENCE_THRESHOLD
+    ]
     if not flagged_clauses:
         return clauses
 
-    print(f"Stage 4.5: Verifying {len(flagged_clauses)} flagged clauses...")
+    print(f"Stage 4.5: Verifying {len(flagged_clauses)} low-confidence flagged clauses...")
     
     prompt_parts = [
         "You are a strict legal document fact-checker. Verify each flagged risk below.",

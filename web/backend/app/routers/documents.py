@@ -1,10 +1,13 @@
 import uuid
+from cachetools import TTLCache
 from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException
 from ..models.document import DocumentAnalysisResult, DocumentStatus
 from ..pipeline import run_analysis_pipeline
 from ..services.db import save_placeholder_document, get_document_analysis
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
+
+_result_cache = TTLCache(maxsize=100, ttl=300)
 
 @router.post("", status_code=202)
 async def upload_document(
@@ -66,9 +69,15 @@ async def upload_document(
 @router.get("/{document_id}", response_model=DocumentAnalysisResult)
 async def get_document(document_id: str):
     """Retrieves document processing status and full analysis once completed."""
+    if document_id in _result_cache:
+        return _result_cache[document_id]
+
     result = get_document_analysis(document_id)
     if not result:
         raise HTTPException(status_code=404, detail="Document analysis not found.")
+
+    if result.status == DocumentStatus.DONE:
+        _result_cache[document_id] = result
     return result
 
 @router.get("/demo/all", tags=["Demo"])

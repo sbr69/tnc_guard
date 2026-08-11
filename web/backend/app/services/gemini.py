@@ -18,24 +18,16 @@ def _is_safety_block_error(error: Exception) -> bool:
         "SPII",
     ])
 
-def get_gemini_client():
-    api_key = settings.gemini_api_key or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is not configured. Please set it in your .env file.")
-    return genai.Client(api_key=api_key)
+_client: genai.Client | None = None
 
-def generate_embedding(text: str) -> list[float]:
-    """Generates a 3072-dimension embedding for a text string using gemini-embedding-001."""
-    client = get_gemini_client()
-    try:
-        response = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=text
-        )
-        return response.embeddings[0].values
-    except Exception as e:
-        print(f"Error generating embedding: {e}")
-        raise e
+def get_gemini_client() -> genai.Client:
+    global _client
+    if _client is None:
+        api_key = settings.gemini_api_key or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not configured. Please set it in your .env file.")
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 def generate_content_with_retry(prompt: str, response_schema=None, temperature: float = 0.2, max_retries: int = 5) -> str:
     """Calls Gemini API with structured output and exponential backoff on rate limits."""
@@ -63,8 +55,6 @@ def generate_content_with_retry(prompt: str, response_schema=None, temperature: 
                 ),
             ]
 
-            # The google-genai SDK crashes on Pydantic models containing $ref and $defs.
-            # We enforce JSON via response_mime_type instead of a strict schema object.
             response = client.models.generate_content(
                 model="gemini-3.5-flash-lite",
                 contents=prompt,
@@ -79,11 +69,10 @@ def generate_content_with_retry(prompt: str, response_schema=None, temperature: 
         except errors.APIError as e:
             if _is_safety_block_error(e):
                 raise GeminiSafetyBlockedError(f"Gemini safety block: {e}") from e
-            # Check for rate limit / RESOURCE_EXHAUSTED (429)
             if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                 print(f"Gemini API rate limit hit (429). Retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")
                 time.sleep(delay)
-                delay *= 2.0  # exponential backoff
+                delay *= 2.0
             else:
                 print(f"Gemini API error: {e}")
                 raise e

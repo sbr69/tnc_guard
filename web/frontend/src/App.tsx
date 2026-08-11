@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { AnalyzerWorkspace } from './components/AnalyzerWorkspace';
-import { ReportsView } from './components/ReportsView';
 import { ShieldCheck, FileText, Sparkles, Home } from 'lucide-react';
 import { ClayButton } from './components/ClayButton';
 import { t } from './i18n';
+
+const ReportsView = lazy(() => import('./components/ReportsView').then(m => ({ default: m.ReportsView })));
 
 function App() {
   const [pathname, setPathname] = useState<string>(window.location.pathname);
@@ -122,7 +123,9 @@ function App() {
           onBackToHome={handleBackToHome} 
         />
       ) : (
-        <ReportsView onBackToHome={handleBackToHome} />
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="text-center"><Sparkles className="w-12 h-12 text-orange-500 animate-pulse mx-auto mb-4" /><h2 className="text-xl font-bold text-gray-800">Loading...</h2></div></div>}>
+          <ReportsView />
+        </Suspense>
       )}
     </div>
   );

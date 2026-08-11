@@ -1,5 +1,6 @@
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from .parser import parse_document
 from .segmenter import segment_document
 from .rules import scan_clause_rules
@@ -37,15 +38,14 @@ def run_analysis_pipeline(
             
         print(f"Successfully extracted {len(extracted_clauses)} clauses.")
         
-        # Stage 3a: Parallel Rule-Based Red-Flag Scan
-        print("Stage 3a: Running deterministic red-flag keyword scan...")
-        rules_map = {}
-        for c in extracted_clauses:
-            rules_map[c.clause_id] = scan_clause_rules(c)
-            
-        # Stage 3b: Parallel pgvector similarity search
-        print("Stage 3b: Querying database vector standards (RAG)...")
-        references_map = batch_retrieve_references(extracted_clauses)
+        # Stage 3a & 3b: Run in parallel (no data dependency)
+        print("Stage 3: Running rule scan and vector retrieval in parallel...")
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            rules_future = executor.submit(_run_rules_scan, extracted_clauses)
+            references_future = executor.submit(batch_retrieve_references, extracted_clauses)
+
+            rules_map = rules_future.result()
+            references_map = references_future.result()
         
         # Stage 4: LLM Reasoning (batched)
         print("Stage 4: Running LLM reasoning...")
@@ -53,7 +53,7 @@ def run_analysis_pipeline(
             clauses=extracted_clauses,
             references_map=references_map,
             rules_map=rules_map,
-            batch_size=20  # Efficient batching for Gemini 3.5 Flash context window
+            batch_size=20
         )
         
         # Stage 4.5: Self-verification
@@ -82,3 +82,10 @@ def run_analysis_pipeline(
         traceback.print_exc()
         set_document_error(doc_id, error_msg)
         raise e
+
+
+def _run_rules_scan(clauses):
+    rules_map = {}
+    for c in clauses:
+        rules_map[c.clause_id] = scan_clause_rules(c)
+    return rules_map

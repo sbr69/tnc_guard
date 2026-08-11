@@ -5,12 +5,47 @@ type DocumentAnalysisResult = components['schemas']['DocumentAnalysisResult'];
 
 const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/$/, '');
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 30000
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  maxRetries = 2
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchWithTimeout(url, options);
+    } catch (err: any) {
+      if (attempt === maxRetries || err.name === 'AbortError') throw err;
+      await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
+    }
+  }
+  throw new Error('Unreachable');
+}
+
 export async function uploadDocumentFile(file: File, documentType: string = 'custom'): Promise<{ id: string; status: string }> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('document_type', documentType);
   
-  const response = await fetch(`${API_BASE}/api/documents`, {
+  const response = await fetchWithRetry(`${API_BASE}/api/documents`, {
     method: 'POST',
     body: formData,
   });
@@ -28,7 +63,7 @@ export async function uploadDocumentText(text: string, documentType: string = 'c
   formData.append('raw_text', text);
   formData.append('document_type', documentType);
   
-  const response = await fetch(`${API_BASE}/api/documents`, {
+  const response = await fetchWithRetry(`${API_BASE}/api/documents`, {
     method: 'POST',
     body: formData,
   });
@@ -46,7 +81,7 @@ export async function uploadDocumentUrl(url: string, documentType: string = 'cus
   formData.append('url', url);
   formData.append('document_type', documentType);
   
-  const response = await fetch(`${API_BASE}/api/documents`, {
+  const response = await fetchWithRetry(`${API_BASE}/api/documents`, {
     method: 'POST',
     body: formData,
   });
@@ -59,8 +94,8 @@ export async function uploadDocumentUrl(url: string, documentType: string = 'cus
   return response.json();
 }
 
-export async function getDocumentAnalysis(id: string): Promise<DocumentAnalysisResult> {
-  const response = await fetch(`${API_BASE}/api/documents/${id}`);
+export async function getDocumentAnalysis(id: string, opts?: { signal?: AbortSignal }): Promise<DocumentAnalysisResult> {
+  const response = await fetchWithTimeout(`${API_BASE}/api/documents/${id}`, { signal: opts?.signal });
   if (!response.ok) {
     throw new Error('Failed to fetch document analysis.');
   }
@@ -68,7 +103,7 @@ export async function getDocumentAnalysis(id: string): Promise<DocumentAnalysisR
 }
 
 export async function getDemoDocuments(): Promise<DocumentAnalysisResult[]> {
-  const response = await fetch(`${API_BASE}/api/documents/demo/all`);
+  const response = await fetchWithTimeout(`${API_BASE}/api/documents/demo/all`);
   if (!response.ok) {
     throw new Error('Failed to fetch demo documents.');
   }

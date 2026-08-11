@@ -74,8 +74,9 @@ export default defineContentScript({
       });
     }
 
+    let allFound = false;
+
     function sendToBackground() {
-      // Avoid sending if we found absolutely nothing
       if (Object.values(discoveredPolicies).every((val) => val === null)) {
         return;
       }
@@ -88,6 +89,11 @@ export default defineContentScript({
           policies: discoveredPolicies,
         },
       });
+
+      allFound = Object.values(discoveredPolicies).every(v => v !== null);
+      if (allFound) {
+        observer.disconnect();
+      }
     }
 
     // 1 & 2: Scan initially on load
@@ -120,9 +126,10 @@ export default defineContentScript({
 
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Stop observing after 5 seconds to save resources
     setTimeout(() => {
-      observer.disconnect();
-    }, 5000);
+      if (!allFound) {
+        observer.disconnect();
+      }
+    }, 15000);
   },
 });

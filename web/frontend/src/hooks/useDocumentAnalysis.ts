@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { components } from '../api/types';
 import { uploadDocumentFile, uploadDocumentText, uploadDocumentUrl, getDocumentAnalysis, getDemoDocuments } from '../api/client';
 
@@ -12,6 +12,18 @@ export function useDocumentAnalysis() {
   const [progressPercentage, setProgressPercentage] = useState<number | null>(null);
   
   const pollingTimeoutRef = useRef<any>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
   
   const clearPolling = useCallback(() => {
     if (pollingTimeoutRef.current) {
@@ -21,11 +33,13 @@ export function useDocumentAnalysis() {
   }, []);
 
   const pollDocument = useCallback(async (docId: string, stepCount: number = 0) => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+
     try {
-      const res = await getDocumentAnalysis(docId);
+      const res = await getDocumentAnalysis(docId, { signal: abortControllerRef.current.signal });
       
       if (res.status === 'processing') {
-        // Increment fake progressive steps to give user visual feedback during actual analysis
         const steps = [
           'Extracting provision boundaries...',
           'Hashing clauses & checking cache...',
@@ -37,7 +51,6 @@ export function useDocumentAnalysis() {
         const currentStepIdx = Math.min(stepCount, steps.length - 1);
         setProgressStep(steps[currentStepIdx]);
         
-        // Move percentage up slowly
         const percentage = Math.min(10 + stepCount * 18, 95);
         setProgressPercentage(percentage);
         
@@ -58,6 +71,7 @@ export function useDocumentAnalysis() {
         setProgressPercentage(null);
       }
     } catch (err: any) {
+      if (err.name === 'AbortError') return;
       setError(err.message || 'Failed to poll document status.');
       setLoading(false);
       setProgressPercentage(null);

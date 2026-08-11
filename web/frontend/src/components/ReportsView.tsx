@@ -231,7 +231,6 @@ export const mockExtensionReports: Record<string, ExtensionSiteData> = {
 };
 
 interface ReportsViewProps {
-  onBackToHome?: () => void;
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = () => {
@@ -284,15 +283,15 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
         reportData = await backendRes.json();
       }
       
-      // 2. Hydrate clauses by fetching documents from backend
-      const hydratedPolicies: Record<PolicyType, ExtensionPolicyData> = {} as any;
-      
-      for (const [ptype, summary] of Object.entries(reportData.policies || {})) {
-        if (!summary) continue;
-        const p = summary as any;
-        
-        let clauses: ExtensionReportClause[] = [];
-        if (p.documentId) {
+      // 2. Hydrate clauses by fetching documents from backend in parallel
+      const policyEntries = Object.entries(reportData.policies || {}).filter(
+        ([, summary]) => summary && (summary as any).documentId
+      );
+
+      const hydratedResults = await Promise.all(
+        policyEntries.map(async ([ptype, summary]) => {
+          const p = summary as any;
+          let clauses: ExtensionReportClause[] = [];
           try {
             const docRes = await fetch(`http://127.0.0.1:8001/api/documents/${p.documentId}`);
             if (docRes.ok) {
@@ -311,20 +310,19 @@ export const ReportsView: React.FC<ReportsViewProps> = () => {
           } catch (err) {
             console.error('Failed to fetch doc', p.documentId, err);
           }
-        }
-        
-        Object.defineProperty(hydratedPolicies, ptype, {
-          value: {
+          return [ptype as PolicyType, {
             type: ptype as PolicyType,
             title: p.title,
             score: p.score,
             riskFlags: p.riskFlags,
             clauses
-          },
-          enumerable: true,
-          writable: true,
-          configurable: true
-        });
+          }] as [PolicyType, ExtensionPolicyData];
+        })
+      );
+
+      const hydratedPolicies: Record<PolicyType, ExtensionPolicyData> = {} as any;
+      for (const [ptype, policy] of hydratedResults) {
+        hydratedPolicies[ptype] = policy;
       }
       
       setLiveData({

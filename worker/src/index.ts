@@ -8,6 +8,24 @@ const corsHeaders = {
 
 const inFlight = new Map<string, Promise<ExtensionSiteReport>>();
 
+const rateLimitMap = new Map<string, { tokens: number; lastRefill: number }>();
+const RATE_LIMIT_MAX = 20;
+const RATE_LIMIT_REFILL_RATE = 3;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip) || { tokens: RATE_LIMIT_MAX, lastRefill: now };
+
+  const elapsed = (now - entry.lastRefill) / 1000;
+  entry.tokens = Math.min(RATE_LIMIT_MAX, entry.tokens + elapsed / RATE_LIMIT_REFILL_RATE);
+  entry.lastRefill = now;
+
+  if (entry.tokens < 1) return false;
+  entry.tokens -= 1;
+  rateLimitMap.set(ip, entry);
+  return true;
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -17,6 +35,14 @@ export default {
     }
 
     if (url.pathname === '/api/analyze' && request.method === 'POST') {
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      if (!checkRateLimit(ip)) {
+        return new Response(JSON.stringify({ error: 'Rate limit exceeded. Try again later.' }), {
+          status: 429,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       try {
         const body: AnalyzeRequest = await request.json();
         const { domain, policyUrls, forceRefresh } = body;

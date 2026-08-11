@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Upload, FileText, ArrowLeft, AlertTriangle, CheckCircle, 
@@ -171,34 +171,35 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     }
   };
 
-  const filteredClauses = currentDoc?.clauses.filter((clause: AnalyzedClause) => {
-    if (filterLevel === 'all') return true;
-    
-    if (filterLevel === 'low' || filterLevel === 'standard') {
-      return clause.riskLevel === 'standard';
+  const { riskyCount, cautionaryCount, standardCount } = useMemo(() => {
+    let risky = 0, cautionary = 0, standard = 0;
+    if (currentDoc) {
+      for (const clause of currentDoc.clauses) {
+        if (clause.riskLevel === 'risky') risky++;
+        else if (clause.riskLevel === 'cautionary') cautionary++;
+        else standard++;
+      }
     }
-    if (filterLevel === 'medium' || filterLevel === 'cautionary') {
-      return clause.riskLevel === 'cautionary';
-    }
-    if (filterLevel === 'high' || filterLevel === 'risky') {
-      return clause.riskLevel === 'risky';
-    }
-    return clause.riskLevel === filterLevel;
-  }) || [];
+    return { riskyCount: risky, cautionaryCount: cautionary, standardCount: standard };
+  }, [currentDoc?.clauses]);
 
-  const countRisks = (level: 'high' | 'medium' | 'low') => {
-    if (!currentDoc) return 0;
-    if (level === 'high') {
-      return currentDoc.clauses.filter((c: AnalyzedClause) => c.riskLevel === 'risky').length;
-    }
-    if (level === 'medium') {
-      return currentDoc.clauses.filter((c: AnalyzedClause) => c.riskLevel === 'cautionary').length;
-    }
-    if (level === 'low') {
-      return currentDoc.clauses.filter((c: AnalyzedClause) => c.riskLevel === 'standard').length;
-    }
-    return 0;
-  };
+  const filteredClauses = useMemo(() => {
+    if (!currentDoc) return [];
+    return currentDoc.clauses.filter((clause: AnalyzedClause) => {
+      if (filterLevel === 'all') return true;
+      
+      if (filterLevel === 'low' || filterLevel === 'standard') {
+        return clause.riskLevel === 'standard';
+      }
+      if (filterLevel === 'medium' || filterLevel === 'cautionary') {
+        return clause.riskLevel === 'cautionary';
+      }
+      if (filterLevel === 'high' || filterLevel === 'risky') {
+        return clause.riskLevel === 'risky';
+      }
+      return clause.riskLevel === filterLevel;
+    });
+  }, [currentDoc?.clauses, filterLevel]);
 
   const getClayCardVariant = (level: string): 'default' | 'low' | 'medium' | 'high' => {
     switch (level) {
@@ -465,15 +466,15 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
               {/* Quick counts */}
               <div className="grid grid-cols-3 gap-2 pt-2 text-[11px] font-bold uppercase tracking-wider">
                 <div className="bg-red-50 text-red-800 p-2 rounded-xl border border-red-100">
-                  <span className="block text-sm font-black">{countRisks('high')}</span>
+                  <span className="block text-sm font-black">{riskyCount}</span>
                   High
                 </div>
                 <div className="bg-yellow-50 text-yellow-800 p-2 rounded-xl border border-yellow-100">
-                  <span className="block text-sm font-black">{countRisks('medium')}</span>
+                  <span className="block text-sm font-black">{cautionaryCount}</span>
                   Caution
                 </div>
                 <div className="bg-green-50 text-green-800 p-2 rounded-xl border border-green-100">
-                  <span className="block text-sm font-black">{countRisks('low')}</span>
+                  <span className="block text-sm font-black">{standardCount}</span>
                   Safe
                 </div>
               </div>

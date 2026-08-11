@@ -23,10 +23,26 @@ class LLMClauseAnalysisBatchResponse(BaseModel):
     analyses: list[LLMClauseAnalysisItem]
 
 
+_PROMPT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts", "risk_reasoning_v1.txt")
+with open(_PROMPT_PATH, "r", encoding="utf-8") as _fh:
+    _RISK_REASONING_TEMPLATE = _fh.read()
+
+
 def get_reasoning_prompt_template() -> str:
-    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts", "risk_reasoning_v1.txt")
-    with open(path, "r", encoding="utf-8") as file_handle:
-        return file_handle.read()
+    return _RISK_REASONING_TEMPLATE
+
+
+def _format_references(refs: list[ReferenceClause]) -> str:
+    if not refs:
+        return "No database matches above similarity threshold."
+    refs_str = ""
+    for idx, reference in enumerate(refs):
+        refs_str += (
+            f"\nReference {idx + 1} [ID: {reference.id}] "
+            f"(Risk: {reference.risk_label}, Source: {reference.source}):\n"
+            f'"{reference.text}"\nWhy: {reference.explanation}\n'
+        )
+    return refs_str
 
 
 def analyze_clause_batch(
@@ -53,17 +69,7 @@ def analyze_clause_batch(
         for clause in batch:
             refs = references_map.get(clause.clause_id, [])
             rule_flags = rules_map.get(clause.clause_id, [])
-
-            if not refs:
-                refs_str = "No database matches above similarity threshold."
-            else:
-                refs_str = ""
-                for idx, reference in enumerate(refs):
-                    refs_str += (
-                        f"\nReference {idx + 1} [ID: {reference.id}] "
-                        f"(Risk: {reference.risk_label}, Source: {reference.source}):\n"
-                        f'"{reference.text}"\nWhy: {reference.explanation}\n'
-                    )
+            refs_str = _format_references(refs)
 
             prompt_parts.append(
                 f"""
