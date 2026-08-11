@@ -69,9 +69,16 @@ def setup_database(cursor):
             summary TEXT,
             error_message TEXT,
             processing_time_seconds FLOAT,
-            created_at TIMESTAMPTZ DEFAULT NOW()
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            content_hash TEXT,
+            source_doc_id UUID
         );
     """)
+
+    # Idempotent migrations for pre-existing databases.
+    cursor.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash TEXT;")
+    cursor.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_doc_id UUID;")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash);")
 
     print("Checking for clauses table...")
     cursor.execute("""

@@ -1,9 +1,10 @@
 from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from ..models.base import CamelModel
 from ..models.extension import ExtensionSiteReport
-from ..services.discovery import discover_policy_urls, hostname_of
-from ..services.site_analyzer import analyze_policies
+from ..services.site_analyzer import build_site_report
+from ..services.site_jobs import start_or_get_job, await_job_briefly, get_job
 
 router = APIRouter(prefix="/api/site", tags=["Site"])
 
@@ -14,21 +15,19 @@ class SiteAnalyzeRequest(CamelModel):
     force_refresh: bool = False
 
 
-@router.post("/analyze", response_model=ExtensionSiteReport)
-async def analyze_site_url(req: SiteAnalyzeRequest):
-    """Auto-discover and analyze all legal documents for a website.
+def _report_response(report, status_code: int = 200) -> JSONResponse:
+    return JSONResponse(report.model_dump(by_alias=True), status_code=status_code)
 
-    Accepts any URL belonging to a site (e.g. github.com or github.com/pricing).
-    Targets the exact subdomain of the URL (website.vercel.app -> only
-    website.vercel.app, never the root vercel.app). Performs hybrid discovery:
-    scrape the homepage for policy links, then guess+validate common paths for
-    any missing types. Missing optional documents are silently skipped.
-    """
+
+@router.post("/analyze")
+async def analyze_site_url(req: SiteAnalyzeRequest):
+    """Start (or resume) analysis for a site. Returns 200 if the job finishes
+    quickly (cache hit / empty / content-hash reuse), otherwise 202 and the
+    client polls GET /api/site/status?hostname=."""
     site_url = (req.site_url or "").strip()
     if not site_url:
         raise HTTPException(status_code=400, detail="siteUrl is required.")
 
-    # Accept bare domains / paths by normalizing to https://
     if not site_url.startswith(("http://", "https://")):
         site_url = "https://" + site_url
 
@@ -41,20 +40,37 @@ async def analyze_site_url(req: SiteAnalyzeRequest):
     if not hostname:
         raise HTTPException(status_code=400, detail="Could not determine hostname from siteUrl.")
 
-    # Discovery is strict-subdomain: provided policy URLs are trusted only when
-    # they sit on the same hostname; missing types are found via homepage scrape
-    # + path guessing.
-    policy_urls = discover_policy_urls(
-        hostname=hostname,
-        site_url=site_url,
-        provided=req.policy_urls,
-    )
+    job = await start_or_get_job(hostname, site_url, req.policy_urls, req.force_refresh)
 
-    if not any(policy_urls.values()):
-        # Nothing found anywhere: return an empty (status=done, no policies)
-        # report instead of erroring, so the UI can show a clean "no policies"
-        # state rather than a stack trace.
-        from ..services.site_analyzer import build_site_report
-        return build_site_report(hostname, {})
+    # Already done (cached in-process).
+    if job["status"] == "done" and job["report"] is not None:
+        return _report_response(job["report"])
 
-    return await analyze_policies(hostname, policy_urls)
+    # Wait briefly so fast jobs return 200 in the same request. A timeout here
+    # just means "still processing" -> fall through to the 202 below.
+    try:
+        await await_job_briefly(job)
+    except TimeoutError:
+        pass
+    except Exception as e:
+        return JSONResponse({"error": str(e) or "Analysis failed."}, status_code=500)
+
+    if job["status"] == "done" and job["report"] is not None:
+        return _report_response(job["report"])
+    if job["status"] == "error":
+        return JSONResponse({"error": job.get("error") or "Analysis failed."}, status_code=500)
+    return JSONResponse({"hostname": hostname, "status": "processing"}, status_code=202)
+
+
+@router.get("/status")
+async def site_status(hostname: str):
+    """Poll the in-progress site analysis. 200 + report when done, 202 while
+    processing, 404 if no job exists (client should re-POST), 500 on error."""
+    job = get_job(hostname)
+    if not job:
+        raise HTTPException(status_code=404, detail="No analysis in progress for this hostname.")
+    if job["status"] == "done" and job["report"] is not None:
+        return _report_response(job["report"])
+    if job["status"] == "error":
+        raise HTTPException(status_code=500, detail=job.get("error") or "Analysis failed.")
+    return JSONResponse({"hostname": hostname, "status": "processing"}, status_code=202)

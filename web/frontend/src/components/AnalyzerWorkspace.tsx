@@ -258,38 +258,34 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
   };
 
   // Metrics computation
-  const { riskyCount, cautionaryCount, standardCount, categories } = useMemo(() => {
-    let risky = 0, cautionary = 0, standard = 0;
+  const { riskyCount, cautionaryCount, categories } = useMemo(() => {
+    let risky = 0, cautionary = 0;
     const catSet = new Set<string>();
     if (currentDoc) {
       for (const clause of currentDoc.clauses) {
         if (clause.category) catSet.add(clause.category);
         if (clause.riskLevel === 'risky') risky++;
         else if (clause.riskLevel === 'cautionary') cautionary++;
-        else standard++;
       }
     }
-    return { 
-      riskyCount: risky, 
-      cautionaryCount: cautionary, 
-      standardCount: standard,
+    return {
+      riskyCount: risky,
+      cautionaryCount: cautionary,
       categories: Array.from(catSet)
     };
   }, [currentDoc?.clauses]);
 
-  // Filtered clauses list
+  // Filtered clauses list (safe / standard terms are hidden from the summary)
   const filteredClauses = useMemo(() => {
     if (!currentDoc) return [];
     return currentDoc.clauses.filter((clause: AnalyzedClause) => {
-      // Risk filter
-      if (filterLevel !== 'all') {
-        if (filterLevel === 'low') {
-          if (clause.riskLevel !== 'standard') return false;
-        } else if (filterLevel === 'medium') {
-          if (clause.riskLevel !== 'cautionary') return false;
-        } else if (filterLevel === 'high') {
-          if (clause.riskLevel !== 'risky') return false;
-        }
+      // Safe (standard) terms are not displayed — only caution + risky.
+      if (clause.riskLevel === 'standard') return false;
+      // Risk filter (low/safe is no longer surfaced in the UI)
+      if (filterLevel === 'medium') {
+        if (clause.riskLevel !== 'cautionary') return false;
+      } else if (filterLevel === 'high') {
+        if (clause.riskLevel !== 'risky') return false;
       }
       
       // Category filter
@@ -925,7 +921,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                 </p>
 
                 {/* Risk Distribution KPI Bar */}
-                <div className="grid grid-cols-3 gap-3 pt-1">
+                <div className="grid grid-cols-2 gap-3 pt-1">
                   <div className="bg-red-50/80 p-3 rounded-2xl border border-red-100 flex items-center justify-between">
                     <div>
                       <span className="text-[10px] font-extrabold text-red-700 uppercase tracking-wider block">{t('riskyGotchas')}</span>
@@ -940,14 +936,6 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                       <span className="text-xl font-black text-amber-900">{cautionaryCount}</span>
                     </div>
                     <AlertTriangle size={22} className="text-amber-500 opacity-80" />
-                  </div>
-
-                  <div className="bg-emerald-50/80 p-3 rounded-2xl border border-emerald-100 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">{t('safeStandard')}</span>
-                      <span className="text-xl font-black text-emerald-900">{standardCount}</span>
-                    </div>
-                    <CheckCircle size={22} className="text-emerald-500 opacity-80" />
                   </div>
                 </div>
               </div>
@@ -988,10 +976,9 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">{t('riskSeverity')}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {[
-                      { key: 'all', label: 'All', count: currentDoc.clauses.length },
+                      { key: 'all', label: 'All', count: riskyCount + cautionaryCount },
                       { key: 'high', label: 'Risky', count: riskyCount },
-                      { key: 'medium', label: 'Caution', count: cautionaryCount },
-                      { key: 'low', label: 'Safe', count: standardCount }
+                      { key: 'medium', label: 'Caution', count: cautionaryCount }
                     ].map((item) => (
                       <button
                         key={item.key}

@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 const inFlight = new Map<string, Promise<ExtensionSiteReport>>();
-const siteInFlight = new Map<string, Promise<ExtensionSiteReport>>();
 
 const rateLimitMap = new Map<string, { tokens: number; lastRefill: number }>();
 const RATE_LIMIT_MAX = 20;
@@ -153,36 +152,30 @@ export default {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
-
-          if (siteInFlight.has(hostname)) {
-            const result = await siteInFlight.get(hostname)!;
-            return new Response(JSON.stringify(result), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
         }
 
-        const analysisPromise = Promise.race([
-          runSiteAnalysis(siteUrl, policyUrls, env),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Analysis timeout')), 300_000)
-          )
-        ]);
-        siteInFlight.set(hostname, analysisPromise);
+        // Proxy to the backend, which owns the (non-blocking) job. The backend
+        // returns 200 for fast/cache-reused jobs, or 202 to signal "poll".
+        const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001';
+        const backendRes = await fetch(`${backendUrl}/api/site/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ siteUrl, policy_urls: policyUrls ?? {} }),
+        });
 
-        try {
-          const result = await analysisPromise;
+        const backendText = await backendRes.text();
+        if (backendRes.status === 200) {
+          // Completed analysis -> cache for 30d.
           ctx.waitUntil(
-            env.CLARIFYLAW_CACHE.put(cacheKey, JSON.stringify(result), {
+            env.CLARIFYLAW_CACHE.put(cacheKey, backendText, {
               expirationTtl: 30 * 24 * 60 * 60,
             })
           );
-          return new Response(JSON.stringify(result), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } finally {
-          siteInFlight.delete(hostname);
         }
+        return new Response(backendText, {
+          status: backendRes.status,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       } catch (e: any) {
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
@@ -197,13 +190,34 @@ export default {
         return new Response('Missing hostname', { status: 400, headers: corsHeaders });
       }
       const cacheKey = `site:${hostname}`;
-      const cachedStr = await env.CLARIFYLAW_CACHE.get(cacheKey);
-      if (cachedStr) {
-        return new Response(cachedStr, {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      const forceRefresh = url.searchParams.get('forceRefresh') === 'true';
+
+      if (!forceRefresh) {
+        const cachedStr = await env.CLARIFYLAW_CACHE.get(cacheKey);
+        if (cachedStr) {
+          return new Response(cachedStr, {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
       }
-      return new Response(JSON.stringify({ error: 'Report not found', cacheMiss: true }), { status: 404, headers: corsHeaders });
+
+      // Poll the backend job status.
+      const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001';
+      const backendRes = await fetch(
+        `${backendUrl}/api/site/status?hostname=${encodeURIComponent(hostname)}`
+      );
+      const backendText = await backendRes.text();
+      if (backendRes.status === 200) {
+        ctx.waitUntil(
+          env.CLARIFYLAW_CACHE.put(cacheKey, backendText, {
+            expirationTtl: 30 * 24 * 60 * 60,
+          })
+        );
+      }
+      return new Response(backendText, {
+        status: backendRes.status,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     return new Response('Not Found', { status: 404, headers: corsHeaders });
@@ -217,23 +231,6 @@ async function runAnalysis(domain: string, policyUrls: AnalyzeRequest['policyUrl
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ domain, policy_urls: policyUrls }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Backend error: ${res.status} - ${text}`);
-  }
-
-  return await res.json();
-}
-
-async function runSiteAnalysis(siteUrl: string, policyUrls: SiteAnalyzeRequest['policyUrls'], env: Env): Promise<ExtensionSiteReport> {
-  const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001';
-
-  const res = await fetch(`${backendUrl}/api/site/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ siteUrl, policy_urls: policyUrls ?? {} }),
   });
 
   if (!res.ok) {

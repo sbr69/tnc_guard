@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 from google import genai
 from google.genai import errors
@@ -6,6 +7,52 @@ from ..config import settings
 
 class GeminiSafetyBlockedError(RuntimeError):
     pass
+
+
+class _TokenBucket:
+    """Thread-safe token bucket that caps Gemini calls per minute.
+
+    Free-tier Gemini quotas are RPM-bound (typically ~15 RPM on the free plan).
+    Bursting N parallel policies blows this quota and triggers 429s, whose
+    exponential backoff (2s->4s->8s...) is far slower than simply pacing calls
+    up-front. This limiter guarantees we never exceed the configured RPM, so the
+    reactive retry path in ``generate_content_with_retry`` is only a safety net.
+    """
+
+    def __init__(self, rate_per_minute: float, burst: int):
+        self._lock = threading.Lock()
+        self._rate = (rate_per_minute / 60.0) if rate_per_minute > 0 else 0.0
+        self._burst = float(max(1, burst))
+        self._tokens = self._burst
+        self._last = time.monotonic()
+
+    def acquire(self) -> None:
+        if self._rate <= 0:
+            _record_gemini_call(0.0)
+            return
+        start = time.monotonic()
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                # Refill tokens based on elapsed wall-clock time.
+                self._tokens = min(self._burst, self._tokens + (now - self._last) * self._rate)
+                self._last = now
+                if self._tokens >= 1.0:
+                    self._tokens -= 1.0
+                    _record_gemini_call(time.monotonic() - start)
+                    return
+                need = 1.0 - self._tokens
+                wait = need / self._rate
+            time.sleep(min(wait, 1.0))
+
+
+def _gemini_limiter() -> _TokenBucket:
+    global _limiter
+    if _limiter is None:
+        rpm = float(os.getenv("GEMINI_RPM", "14") or "14")
+        burst = int(os.getenv("GEMINI_BURST", "3") or "3")
+        _limiter = _TokenBucket(rpm, burst)
+    return _limiter
 
 
 def _is_safety_block_error(error: Exception) -> bool:
@@ -19,6 +66,29 @@ def _is_safety_block_error(error: Exception) -> bool:
     ])
 
 _client: genai.Client | None = None
+_limiter: "_TokenBucket | None" = None
+
+# Observability (#4): counts every Gemini API call + total time spent waiting in
+# the rate limiter, so GEMINI_RPM can be tuned to the account's real ceiling.
+_stats_lock = threading.Lock()
+_stats = {"calls": 0, "wait_seconds": 0.0}
+
+
+def reset_gemini_stats() -> None:
+    with _stats_lock:
+        _stats["calls"] = 0
+        _stats["wait_seconds"] = 0.0
+
+
+def get_gemini_stats() -> dict:
+    with _stats_lock:
+        return {"calls": _stats["calls"], "wait_seconds": _stats["wait_seconds"]}
+
+
+def _record_gemini_call(wait_seconds: float) -> None:
+    with _stats_lock:
+        _stats["calls"] += 1
+        _stats["wait_seconds"] += wait_seconds
 
 def get_gemini_client() -> genai.Client:
     global _client
@@ -31,6 +101,7 @@ def get_gemini_client() -> genai.Client:
 
 def generate_content_with_retry(prompt: str, response_schema=None, temperature: float = 0.2, max_retries: int = 5) -> str:
     """Calls Gemini API with structured output and exponential backoff on rate limits."""
+    _gemini_limiter().acquire()
     client = get_gemini_client()
     delay = 2.0
     

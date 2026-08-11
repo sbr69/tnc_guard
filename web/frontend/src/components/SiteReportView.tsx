@@ -67,6 +67,8 @@ export const SiteReportView: React.FC<SiteReportViewProps> = ({ site, onReset })
   const filteredClauses = useMemo(() => {
     if (!currentPolicy || !currentPolicy.clauses) return [];
     return currentPolicy.clauses.filter((clause) => {
+      // Safe (low) terms are not displayed in the summary — only caution + risky.
+      if (clause.riskLevel === 'low') return false;
       if (filterLevel !== 'all' && clause.riskLevel !== filterLevel) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -100,10 +102,6 @@ export const SiteReportView: React.FC<SiteReportViewProps> = ({ site, onReset })
   );
   const cautionCount = useMemo(
     () => currentPolicy?.clauses?.filter(c => c.riskLevel === 'medium').length ?? 0,
-    [currentPolicy]
-  );
-  const safeCount = useMemo(
-    () => currentPolicy?.clauses?.filter(c => c.riskLevel === 'low').length ?? 0,
     [currentPolicy]
   );
 
@@ -174,7 +172,7 @@ export const SiteReportView: React.FC<SiteReportViewProps> = ({ site, onReset })
               {t('scanned4Policies')} ClarifyLaw isolated provisions across active policies and mapped them against standard consumer protection baselines.
             </p>
 
-            <div className="grid grid-cols-3 gap-3 pt-1">
+            <div className="grid grid-cols-2 gap-3 pt-1">
               <div className="bg-red-50/80 p-3 rounded-2xl border border-red-100 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] font-extrabold text-red-700 uppercase tracking-wider block">{t('highRiskTerms')}</span>
@@ -188,13 +186,6 @@ export const SiteReportView: React.FC<SiteReportViewProps> = ({ site, onReset })
                   <span className="text-xl font-black text-amber-900">{cautionCount}</span>
                 </div>
                 <AlertTriangle size={22} className="text-amber-500 opacity-80" />
-              </div>
-              <div className="bg-emerald-50/80 p-3 rounded-2xl border border-emerald-100 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">{t('safeStandard')}</span>
-                  <span className="text-xl font-black text-emerald-900">{safeCount}</span>
-                </div>
-                <CheckCircle size={22} className="text-emerald-500 opacity-80" />
               </div>
             </div>
           </div>
@@ -265,10 +256,9 @@ export const SiteReportView: React.FC<SiteReportViewProps> = ({ site, onReset })
               <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">{t('riskSeverity')}</span>
               <div className="flex flex-wrap gap-1.5">
                 {[
-                  { key: 'all', label: 'All', count: currentPolicy?.clauses?.length || 0 },
+                  { key: 'all', label: 'All', count: highRiskCount + cautionCount },
                   { key: 'high', label: 'High', count: highRiskCount },
-                  { key: 'medium', label: 'Caution', count: cautionCount },
-                  { key: 'low', label: 'Safe', count: safeCount }
+                  { key: 'medium', label: 'Caution', count: cautionCount }
                 ].map((item) => (
                   <button
                     key={item.key}

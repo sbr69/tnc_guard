@@ -81,11 +81,14 @@ export default defineBackground(() => {
       const domain = message.payload.domain;
       const siteUrl = message.payload.pageUrl || (domain ? `https://${domain}/` : undefined);
       const forceRefresh = message.payload.forceRefresh || false;
+      // The popup asks the content script to scan the page and forwards the
+      // discovered policy URLs here. Fall back to storage if absent.
+      const policyUrls = message.payload.policyUrls ?? await getDiscoveredPolicies(domain);
       if (!siteUrl) {
         browser.runtime.sendMessage({ type: 'REPORT_ERROR', payload: { domain, error: 'No page URL to analyze.' } }).catch(() => {});
         return true;
       }
-      triggerAnalysis(siteUrl, domain, await getDiscoveredPolicies(domain), forceRefresh).then((data) => {
+      triggerAnalysis(siteUrl, domain, policyUrls, forceRefresh).then((data) => {
         if (data.status !== 'error') {
           browser.runtime.sendMessage({ type: 'REPORT_READY', payload: data }).catch(() => {});
         }
@@ -139,32 +142,81 @@ export default defineBackground(() => {
     }
     
     await updateBadge(null, 'processing');
-    browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Discovering & analyzing policies via Cloudflare...' } }).catch(() => {});
-    
-    // 2. Call Cloudflare Worker (Tier 2) -> backend /api/site/analyze
-    //    The backend merges client-discovered policyUrls with server-side
-    //    discovery (homepage scrape + path guessing) for any missing types.
+    browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Discovering & analyzing policies...' } }).catch(() => {});
+
+    // Worker (Tier 2) -> backend /api/site/analyze (non-blocking job).
+    // 200 = done (cache hit / empty / content-hash reuse); 202 = poll.
     // TODO: Update URL when deployed. Using localhost for dev.
-    const WORKER_URL = 'http://127.0.0.1:8787/api/site/analyze'; 
-    
+    const WORKER_URL = 'http://127.0.0.1:8787/api/site/analyze';
+
+    const post = () => fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ siteUrl, policyUrls, forceRefresh }),
+    });
+
+    const buildPopupData = (report: ExtensionSiteReport): ExtensionPopupData => {
+      const foundPolicyEntries = Object.entries(report.policies || {});
+      const policiesFound = foundPolicyEntries.map(([type, policy]) => ({
+        type: type as PolicyType,
+        found: true,
+        score: policy?.score ?? null,
+        documentId: policy?.documentId ?? null,
+      }));
+      return {
+        domain: report.domain || domain,
+        siteName: report.siteName || domain,
+        overallScore: report.overallScore,
+        scanDate: report.scanDate,
+        status: report.status,
+        riskFlags: report.topRiskFlags,
+        policiesFound,
+      };
+    };
+
     try {
-      const res = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteUrl, policyUrls, forceRefresh })
-      });
-      
-      if (!res.ok) {
+      let report: ExtensionSiteReport | null = null;
+
+      const res = await post();
+      if (res.status === 200) {
+        report = await res.json();
+      } else if (res.status === 202) {
+        const hostname = new URL(siteUrl).hostname;
+        const deadline = Date.now() + 5 * 60 * 1000;
+        let restarted = false;
+        const pollUrl = `${WORKER_URL}?hostname=${encodeURIComponent(hostname)}${forceRefresh ? '&forceRefresh=true' : ''}`;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 4000));
+          browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Analyzing policies (RAG pipeline)...' } }).catch(() => {});
+          const g = await fetch(pollUrl);
+          if (g.status === 200) {
+            report = await g.json();
+            break;
+          }
+          if (g.status === 404) {
+            if (restarted) throw new Error('Analysis job was lost. Try again.');
+            restarted = true;
+            const r2 = await post();
+            if (r2.status === 200) { report = await r2.json(); break; }
+            if (r2.status !== 202) {
+              const e = await r2.json().catch(() => null);
+              throw new Error(e?.error || `Worker returned ${r2.status}`);
+            }
+            continue;
+          }
+          if (g.status >= 500) {
+            const e = await g.json().catch(() => null);
+            throw new Error(e?.error || e?.detail || `Analysis failed (${g.status})`);
+          }
+        }
+        if (!report) throw new Error('Analysis timed out. Try again.');
+      } else {
         const errJson = await res.json().catch(() => null);
-        const detail = errJson?.error || (await res.text().catch(() => ''));
+        const detail = errJson?.error || errJson?.detail || (await res.text().catch(() => ''));
         throw new Error(detail ? `Analysis Error: ${detail}` : `Worker returned ${res.status}`);
       }
-      
-      const report: ExtensionSiteReport = await res.json();
-      
-      // Backend returns only the policies it actually found. If none were found
-      // anywhere, surface a clean "no policies" state (no per-type errors).
-      const foundPolicyEntries = Object.entries(report.policies || {});
+
+      const foundPolicyEntries = Object.entries(report!.policies || {});
       if (foundPolicyEntries.length === 0) {
         await updateBadge(null, 'no-policies');
         browser.runtime.sendMessage({ type: 'NO_POLICIES', payload: { domain } }).catch(() => {});
@@ -175,31 +227,16 @@ export default defineBackground(() => {
           scanDate: new Date().toLocaleDateString(),
           status: 'error',
           riskFlags: [],
-          policiesFound: []
+          policiesFound: [],
         };
       }
-      
-      const policiesFound = foundPolicyEntries.map(([type, policy]) => ({
-        type: type as PolicyType,
-        found: true,
-        score: policy?.score ?? null,
-        documentId: policy?.documentId ?? null
-      }));
-      
-      const popupData: ExtensionPopupData = {
-        domain: report.domain || domain,
-        siteName: report.siteName || domain,
-        overallScore: report.overallScore,
-        scanDate: report.scanDate,
-        status: report.status,
-        riskFlags: report.topRiskFlags,
-        policiesFound,
-      };
-      
+
+      const popupData = buildPopupData(report!);
+
       // Store in Tier 1 cache
       await browser.storage.local.set(Object.fromEntries([[cacheKey, popupData]]));
       await updateBadge(popupData.overallScore, popupData.status);
-      
+
       return popupData;
     } catch (err) {
       console.error('Analysis failed:', err);

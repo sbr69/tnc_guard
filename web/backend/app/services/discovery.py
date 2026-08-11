@@ -16,6 +16,8 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from .url_cache import get as cache_get, set as cache_set
+
 POLICY_TYPES = ("privacy", "tos", "cookie", "eula")
 
 POLICY_URL_PATTERNS = {
@@ -138,7 +140,11 @@ def _probe_guess(hostname: str, ptype: str) -> str | None:
         html = _fetch(url)
         if html is None:
             continue
-        if _looks_like_policy(_extract_text(html), ptype):
+        text = _extract_text(html)
+        if _looks_like_policy(text, ptype):
+            # Cache the validated text so the RAG pipeline's parse_url can
+            # reuse it instead of re-fetching the same URL (P0-1).
+            cache_set(url, text)
             return url
     return None
 
@@ -175,8 +181,11 @@ def discover_policy_urls(
         pt = _classify_link(site_url, "")
         if pt:
             html = _fetch(site_url)
-            if html and _looks_like_policy(_extract_text(html), pt):
-                found[pt] = site_url
+            if html:
+                text = _extract_text(html)
+                if _looks_like_policy(text, pt):
+                    cache_set(site_url, text)
+                    found[pt] = site_url
 
     # 4. Guess common paths for still-missing types (probe types in parallel,
     #    paths within a type sequentially, stopping at first valid match).

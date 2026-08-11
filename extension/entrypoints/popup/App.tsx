@@ -1,88 +1,153 @@
 import { useState, useEffect, useRef } from 'react';
-import type { ExtensionPopupData } from '../../lib/types';
-import { Shield, ShieldAlert, ShieldCheck, FileText, CheckCircle2, XCircle, Search, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
+import type { ExtensionPopupData, PolicyType } from '../../lib/types';
+import { Shield, ShieldAlert, ShieldCheck, FileText, CheckCircle2, Search, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import { t } from '../../lib/i18n';
 import './style.css';
 
+const EMPTY_POLICY_URLS: Record<PolicyType, string | null> = {
+  privacy: null, tos: null, cookie: null, eula: null,
+};
+
 export default function App() {
   const [domain, setDomain] = useState<string>('');
   const [data, setData] = useState<ExtensionPopupData | null>(null);
-  const [loadingMsg, setLoadingMsg] = useState<string>('Checking...');
+  const [idle, setIdle] = useState<boolean>(true);
+  const [loadingMsg, setLoadingMsg] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const domainRef = useRef<string>('');
 
   useEffect(() => {
-    // 1. Get current tab domain
+    // On open: do NOT auto-trigger analysis. Just resolve the active tab and
+    // show a cached report if one exists; otherwise show the "Analyse" button.
     browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
       const activeTab = tabs[0];
-      if (activeTab?.url) {
-        try {
-          const url = new URL(activeTab.url);
-          // Only process http/https
-          if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-            setError('Cannot analyze this page type.');
-            return;
-          }
-          domainRef.current = url.hostname;
-          setDomain(url.hostname);
-          
-          // 2. Ask background for data (send the active tab URL so the backend
-          //    can do server-side discovery for any policy types the content
-          //    script didn't find on the page).
-          browser.runtime.sendMessage({ type: 'GET_CURRENT_REPORT', payload: { domain: url.hostname, pageUrl: url.href } });
-        } catch (e) {
-          setError('Invalid URL.');
-        }
+      if (!activeTab?.url) {
+        setError('No active page to analyze.');
+        return;
       }
+      let url: URL;
+      try {
+        url = new URL(activeTab.url);
+      } catch {
+        setError('Invalid page URL.');
+        return;
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        setError('Cannot analyze this page type.');
+        return;
+      }
+      domainRef.current = url.hostname;
+      setDomain(url.hostname);
+
+      const cacheKey = `report:${url.hostname}`;
+      browser.storage.local.get(cacheKey).then((res) => {
+        if (res[cacheKey]) {
+          setData(res[cacheKey] as ExtensionPopupData);
+          setIdle(false);
+          setError(null);
+        } else {
+          setIdle(true);
+        }
+      });
     });
 
+    // Live cache updates (e.g. background finished a re-scan).
     const storageListener = (changes: any, area: string) => {
       if (area !== 'local') return;
       const cacheKey = `report:${domainRef.current}`;
       if (domainRef.current && changes[cacheKey]?.newValue) {
         setData(changes[cacheKey].newValue as ExtensionPopupData);
         setError(null);
+        setIdle(false);
       }
     };
     browser.storage.onChanged.addListener(storageListener);
 
-    // 3. Listen for responses
     const listener = (message: any) => {
       if (message.type === 'REPORT_READY') {
         setData(message.payload);
         setError(null);
+        setIdle(false);
       } else if (message.type === 'REPORT_LOADING') {
         setLoadingMsg(message.payload.stage || 'Analyzing...');
-        setData(prev => prev ? { ...prev, status: 'processing' } : null);
+        setData((prev) => (prev ? { ...prev, status: 'processing' } : null));
         setError(null);
+        setIdle(false);
       } else if (message.type === 'REPORT_ERROR') {
         setError(message.payload.error || 'Failed to analyze this site.');
+        setIdle(false);
       } else if (message.type === 'NO_POLICIES') {
-        setError('No legal documents detected on this page. Try right-clicking a link and selecting "Analyze with ClarifyLaw".');
+        setError('No legal documents detected on this page. Try the "Analyse" button again, or open the site\'s homepage first.');
+        setIdle(false);
       }
     };
-    
     browser.runtime.onMessage.addListener(listener);
+
     return () => {
       browser.storage.onChanged.removeListener(storageListener);
       browser.runtime.onMessage.removeListener(listener);
     };
   }, []);
 
+  const handleAnalyze = async (forceRefresh = false) => {
+    setError(null);
+    setData(null);
+    setIdle(false);
+    setLoadingMsg(forceRefresh ? 'Re-scanning and bypassing cache...' : 'Scanning page for policy links...');
+
+    let tab;
+    try {
+      const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+      tab = tabs[0];
+    } catch {
+      setError('Could not access the active tab.');
+      return;
+    }
+    if (!tab?.url || tab.id == null) {
+      setError('No active page to analyze.');
+      return;
+    }
+    let url: URL;
+    try {
+      url = new URL(tab.url);
+    } catch {
+      setError('Invalid page URL.');
+      return;
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      setError('Cannot analyze this page type.');
+      return;
+    }
+
+    // Ask the content script to scan the page DOM (lazy on-demand scan).
+    let scan: { policies?: Record<PolicyType, string | null>; pageUrl?: string } | null = null;
+    try {
+      scan = await browser.tabs.sendMessage(tab.id, { type: 'SCAN_POLICIES', payload: { timeoutMs: 2000 } });
+    } catch {
+      setError('Could not scan this page. Reload the tab and try again.');
+      return;
+    }
+
+    const pageUrl = scan?.pageUrl || tab.url;
+    const policyUrls = scan?.policies ?? EMPTY_POLICY_URLS;
+
+    browser.runtime.sendMessage({
+      type: 'GET_CURRENT_REPORT',
+      payload: { domain: url.hostname, pageUrl, policyUrls, forceRefresh },
+    });
+  };
+
   const handleCheckSummary = () => {
     if (domain) {
       browser.runtime.sendMessage({ type: 'OPEN_FULL_REPORT', payload: { domain } });
-      window.close(); // Close popup
+      window.close();
     }
   };
 
   const handleRescan = () => {
-    if (domain) {
-      setData(null);
-      setLoadingMsg('Re-scanning and bypassing cache...');
-      browser.runtime.sendMessage({ type: 'GET_CURRENT_REPORT', payload: { domain, forceRefresh: true } });
-    }
+    setData(null);
+    handleAnalyze(true);
   };
 
   // State 1: Error
@@ -93,8 +158,8 @@ export default function App() {
         <h2 className="text-lg font-bold mb-2">{t('ClarifyLaw')}</h2>
         <p className="text-sm text-gray-600 mb-4">{error}</p>
         <div className="flex gap-2">
-          <button onClick={handleRescan} className="clay-btn clay-btn-primary px-4 py-2 flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" /> {t('Re-scan')}
+          <button onClick={handleAnalyze} className="clay-btn clay-btn-primary px-4 py-2 flex items-center gap-2">
+            <RefreshCw className="w-4 h-4" /> {t('Analyse')}
           </button>
           <button onClick={() => window.close()} className="clay-btn clay-btn-secondary px-4 py-2">{t('Close')}</button>
         </div>
@@ -102,17 +167,32 @@ export default function App() {
     );
   }
 
-  // State 2: Loading / Analyzing
+  // State 2: Idle — Analyse button (extension works on click, not on popup open)
+  if (idle && !data) {
+    return (
+      <div className="w-87.5 p-5 bg-brand-bg text-brand-ink font-sans flex flex-col items-center text-center min-h-75 justify-center">
+        <Shield className="w-12 h-12 text-brand-primary mb-3" />
+        <h2 className="text-lg font-bold mb-1">{t('ClarifyLaw')}</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          {domain ? `${t('Analyse')} ${domain}` : t('Analyse')}
+        </p>
+        <button onClick={handleAnalyze} className="clay-btn clay-btn-primary px-5 py-2.5 flex items-center gap-2 text-sm">
+          <Search className="w-4 h-4" /> {t('Analyse this site')}
+        </button>
+      </div>
+    );
+  }
+
+  // State 3: Loading / Analyzing
   if (!data || data.status === 'processing') {
     return (
       <div className="w-87.5 p-5 bg-brand-bg text-brand-ink font-sans flex flex-col items-center justify-center min-h-75">
         <Search className="w-12 h-12 text-brand-primary animate-pulse mb-4" />
         <h2 className="text-lg font-bold mb-1">{t('Analyzing')} {domain || '...'}</h2>
         <p className="text-sm text-gray-500 mb-4 text-center">{loadingMsg}</p>
-        
         {data?.status === 'processing' && (
           <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2 overflow-hidden">
-             <div className="bg-brand-primary h-2.5 rounded-full w-2/3 animate-pulse"></div>
+            <div className="bg-brand-primary h-2.5 rounded-full w-2/3 animate-pulse"></div>
           </div>
         )}
       </div>
@@ -124,9 +204,9 @@ export default function App() {
   const isWarning = data.overallScore >= 5.0 && data.overallScore < 7.5;
 
   const scoreColor = isSafe ? 'text-green-600' : isWarning ? 'text-yellow-600' : 'text-red-600';
-  const ScoreIcon = isSafe ? ShieldCheck : isWarning ? ShieldAlert : XCircle;
+  const ScoreIcon = isSafe ? ShieldCheck : isWarning ? ShieldAlert : AlertTriangle;
 
-  // State 3 & 4: Results (Risks Found or Safe)
+  // State 4: Results
   return (
     <div className="w-95 bg-brand-bg text-brand-ink font-sans">
       {/* Header */}
@@ -135,7 +215,7 @@ export default function App() {
           <Shield className="w-5 h-5 text-brand-primary" />
           <span className="font-bold text-sm">{t('ClarifyLaw')}</span>
         </div>
-        <button onClick={handleRescan} className="text-gray-400 hover:text-brand-primary transition-colors" title="Force Re-scan">
+        <button onClick={handleRescan} className="text-gray-400 hover:text-brand-primary transition-colors" title="Re-scan">
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
@@ -152,7 +232,7 @@ export default function App() {
           <span className="text-sm font-medium mt-1 truncate max-w-62.5">{data.siteName || data.domain}</span>
         </div>
 
-        {/* Risk Flags */}
+        {/* Risk Flags (only risky + caution — safe terms are not surfaced) */}
         {data.riskFlags && data.riskFlags.length > 0 ? (
           <div>
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
@@ -181,7 +261,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Policies Found (only documents that were actually found/analyzed) */}
+        {/* Policies Found (only documents actually found/analyzed) */}
         <div className="flex flex-wrap gap-2 text-xs font-medium pt-1">
           {data.policiesFound.filter(p => p.found).map(p => (
             <div key={p.type} className="flex items-center gap-1 px-2 py-1 rounded-full bg-brand-accent-light text-brand-hover">
@@ -192,7 +272,7 @@ export default function App() {
         </div>
 
         {/* CTA */}
-        <button 
+        <button
           onClick={handleCheckSummary}
           className="clay-btn clay-btn-primary w-full py-3 mt-2 flex items-center justify-center gap-2 text-sm"
         >

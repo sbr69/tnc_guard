@@ -2,7 +2,7 @@ import os
 import json
 import psycopg2
 from psycopg2.pool import ThreadedConnectionPool
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_values
 from contextlib import contextmanager
 from ..config import settings
 from ..models.reference import ReferenceClause
@@ -20,9 +20,36 @@ def _init_pool():
         raise ValueError("DATABASE_URL is not configured. Please set it in your .env file.")
     _pool = ThreadedConnectionPool(
         minconn=2,
-        maxconn=10,
+        maxconn=20,
         dsn=database_url
     )
+    _ensure_migrations()
+
+
+def _ensure_migrations():
+    """Idempotent schema migrations for content-hash dedup.
+
+    Adds ``content_hash`` and ``source_doc_id`` to ``documents`` so identical
+    policy text can be reused (zero Gemini) across users/re-runs. Safe on
+    existing databases: columns are nullable, existing rows get NULL.
+    """
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash TEXT;")
+                cursor.execute("ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_doc_id UUID;")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash);"
+                )
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print(f"[migrations] content_hash migration skipped: {e}")
+            finally:
+                cursor.close()
+    except Exception as e:
+        print(f"[migrations] could not run: {e}")
 
 @contextmanager
 def get_db_connection():
@@ -67,20 +94,76 @@ def retrieve_similar_reference_clauses(embedding: list[float], limit: int = 5, t
         finally:
             cursor.close()
 
-def save_placeholder_document(doc_id: str, filename: str, raw_text: str) -> None:
+def save_placeholder_document(doc_id: str, filename: str, raw_text: str, content_hash: str | None = None) -> None:
     """Inserts a document record with status = 'processing'."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         try:
             cursor.execute("""
-                INSERT INTO documents (id, filename, raw_text, status)
-                VALUES (%s, %s, %s, 'processing')
+                INSERT INTO documents (id, filename, raw_text, status, content_hash)
+                VALUES (%s, %s, %s, 'processing', %s)
                 ON CONFLICT (id) DO NOTHING
-            """, (doc_id, filename, raw_text))
+            """, (doc_id, filename, raw_text, content_hash))
             conn.commit()
         except Exception as e:
             conn.rollback()
             print(f"Error saving placeholder document: {e}")
+            raise e
+        finally:
+            cursor.close()
+
+def get_done_doc_id_by_hash(content_hash: str, exclude_id: str | None = None) -> str | None:
+    """Return the id of a completed document with the same content hash, if any.
+
+    Used for content-hash dedup: identical policy text reuses a prior analysis
+    instead of re-running the RAG pipeline (zero Gemini cost).
+    """
+    if not content_hash:
+        return None
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            if exclude_id:
+                cursor.execute(
+                    "SELECT id FROM documents WHERE content_hash = %s AND status = 'done' AND id != %s LIMIT 1;",
+                    (content_hash, exclude_id),
+                )
+            else:
+                cursor.execute(
+                    "SELECT id FROM documents WHERE content_hash = %s AND status = 'done' LIMIT 1;",
+                    (content_hash,),
+                )
+            row = cursor.fetchone()
+            return str(row[0]) if row else None
+        except Exception as e:
+            print(f"Error looking up document by content hash: {e}")
+            return None
+        finally:
+            cursor.close()
+
+def mark_document_reuse(doc_id: str, source_doc_id: str, health_score: int | None, summary: str | None, processing_time: float | None, doc_type: str) -> None:
+    """Mark ``doc_id`` as done, pointing at ``source_doc_id`` for its clauses.
+
+    No clauses are copied — ``get_document_analysis`` resolves ``source_doc_id``
+    and serves the source's clauses under this id.
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE documents
+                SET status = 'done',
+                    health_score = %s,
+                    summary = %s,
+                    processing_time_seconds = %s,
+                    document_type = %s,
+                    source_doc_id = %s
+                WHERE id = %s
+            """, (health_score, summary, processing_time, doc_type, source_doc_id, doc_id))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"Error marking document reuse: {e}")
             raise e
         finally:
             cursor.close()
@@ -106,7 +189,7 @@ def save_document_analysis(doc_id: str, result: DocumentAnalysisResult) -> None:
     """Saves full document and clause-level analysis into database."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        
+
         try:
             # 1. Update documents table
             cursor.execute("""
@@ -124,24 +207,28 @@ def save_document_analysis(doc_id: str, result: DocumentAnalysisResult) -> None:
                 result.document_type,
                 doc_id
             ))
-            
-            # 2. Insert clauses and their risk_flags
-            for idx, clause in enumerate(result.clauses):
-                clause_db_id = clause.id
-                
-                cursor.execute("""
+
+            # 2. Batch-insert clauses (single round-trip instead of one per clause)
+            clause_rows = [
+                (clause.id, doc_id, clause.original_text, clause.section_location, idx + 1)
+                for idx, clause in enumerate(result.clauses)
+            ]
+            if clause_rows:
+                execute_values(
+                    cursor,
+                    """
                     INSERT INTO clauses (id, doc_id, text, section_path, order_index)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (clause_db_id, doc_id, clause.original_text, clause.section_location, idx + 1))
-                
-                cursor.execute("""
-                    INSERT INTO risk_flags (
-                        clause_id, title, category, risk_level, confidence,
-                        reasoning, plain_language, rag_comparison, rule_flags,
-                        compared_reference_ids, section_location
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s)
-                """, (
-                    clause_db_id,
+                    VALUES %s
+                    """,
+                    clause_rows,
+                    page_size=100,
+                )
+
+            # 3. Batch-insert risk_flags (one round-trip). compared_reference_ids
+            #    is a uuid[] column, hence the explicit cast in the template.
+            risk_rows = [
+                (
+                    clause.id,
                     clause.title,
                     clause.category.value,
                     clause.risk_level.value,
@@ -151,9 +238,25 @@ def save_document_analysis(doc_id: str, result: DocumentAnalysisResult) -> None:
                     clause.rag_comparison,
                     clause.rule_flags,
                     clause.compared_reference_ids,
-                    clause.section_location
-                ))
-                
+                    clause.section_location,
+                )
+                for clause in result.clauses
+            ]
+            if risk_rows:
+                execute_values(
+                    cursor,
+                    """
+                    INSERT INTO risk_flags (
+                        clause_id, title, category, risk_level, confidence,
+                        reasoning, plain_language, rag_comparison, rule_flags,
+                        compared_reference_ids, section_location
+                    ) VALUES %s
+                    """,
+                    risk_rows,
+                    template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::uuid[], %s)",
+                    page_size=100,
+                )
+
             conn.commit()
         except Exception as e:
             conn.rollback()
@@ -171,7 +274,7 @@ def get_document_analysis(doc_id: str) -> DocumentAnalysisResult | None:
             # Fetch document meta
             cursor.execute("""
                 SELECT id, filename, status, health_score, summary, error_message, created_at,
-                       processing_time_seconds, document_type
+                       processing_time_seconds, document_type, source_doc_id
                 FROM documents
                 WHERE id = %s
             """, (doc_id,))
@@ -182,7 +285,8 @@ def get_document_analysis(doc_id: str) -> DocumentAnalysisResult | None:
                 
             status = doc_row['status']
             created_at_str = doc_row['created_at'].strftime("%b %d, %Y")
-            
+            source_doc_id = doc_row.get('source_doc_id')
+
             if status != 'done':
                 return DocumentAnalysisResult(
                     id=str(doc_row['id']),
@@ -192,8 +296,12 @@ def get_document_analysis(doc_id: str) -> DocumentAnalysisResult | None:
                     upload_date=created_at_str,
                     error_message=doc_row['error_message']
                 )
-                
-            # Fetch clause details and risk flags
+
+            # Content-hash dedup: if this document points at a source, serve the
+            # source's clauses under this id (no rows are copied).
+            clause_doc_id = str(source_doc_id) if source_doc_id else doc_id
+
+            # Fetch clause details and risk flags (from the source if reused)
             cursor.execute("""
                 SELECT c.id, c.text as original_text, c.section_path,
                        r.title, r.category, r.risk_level, r.confidence, r.reasoning,
@@ -202,7 +310,7 @@ def get_document_analysis(doc_id: str) -> DocumentAnalysisResult | None:
                 JOIN risk_flags r ON c.id = r.clause_id
                 WHERE c.doc_id = %s
                 ORDER BY c.order_index ASC
-            """, (doc_id,))
+            """, (clause_doc_id,))
             clause_rows = cursor.fetchall()
             
             clauses = []

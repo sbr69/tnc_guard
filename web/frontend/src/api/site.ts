@@ -60,29 +60,74 @@ const WORKER_URL =
 const BACKEND_URL =
   ((import.meta.env.VITE_API_URL as string | undefined) ?? 'http://127.0.0.1:8001').replace(/\/$/, '');
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function normalizeSiteUrl(siteUrl: string): string {
+  let s = siteUrl.trim();
+  if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+  return s;
+}
+
+function hostnameOf(siteUrl: string): string {
+  return new URL(normalizeSiteUrl(siteUrl)).hostname;
+}
+
 export async function analyzeSite(
   siteUrl: string,
   policyUrls?: Partial<Record<PolicyType, string | null>>,
   forceRefresh = false
 ): Promise<ExtensionSiteReport> {
-  const res = await fetch(`${WORKER_URL}/api/site/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ siteUrl, policyUrls: policyUrls ?? {}, forceRefresh }),
-  });
-  if (!res.ok) {
+  const normalized = normalizeSiteUrl(siteUrl);
+  const hostname = hostnameOf(normalized);
+
+  const post = () =>
+    fetch(`${WORKER_URL}/api/site/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ siteUrl: normalized, policyUrls: policyUrls ?? {}, forceRefresh }),
+    });
+
+  // Fast path: 200 = done (cache hit, empty, or content-hash reuse).
+  let res = await post();
+  if (res.status === 200) return res.json();
+  if (res.status !== 202) {
     const err = await res.json().catch(() => null);
     throw new Error(err?.error || `Worker returned ${res.status}`);
   }
-  return res.json();
+
+  // Poll the worker's GET status endpoint (short requests, real progress).
+  const deadline = Date.now() + 5 * 60 * 1000;
+  let restarted = false;
+  const pollUrl = `${WORKER_URL}/api/site/analyze?hostname=${encodeURIComponent(hostname)}${forceRefresh ? '&forceRefresh=true' : ''}`;
+  while (Date.now() < deadline) {
+    await sleep(4000);
+    const g = await fetch(pollUrl);
+    if (g.status === 200) return g.json();
+    if (g.status === 404) {
+      // Job lost (backend restart / different isolate) -> re-POST once.
+      if (restarted) throw new Error('Analysis job was lost. Please try again.');
+      restarted = true;
+      const r2 = await post();
+      if (r2.status === 200) return r2.json();
+      if (r2.status !== 202) {
+        const e2 = await r2.json().catch(() => null);
+        throw new Error(e2?.error || `Worker returned ${r2.status}`);
+      }
+      continue;
+    }
+    if (g.status >= 500) {
+      const e = await g.json().catch(() => null);
+      throw new Error(e?.error || e?.detail || `Analysis failed (${g.status})`);
+    }
+    // 202 -> still processing, keep polling.
+  }
+  throw new Error('Analysis timed out. Please try again.');
 }
 
 export async function getSiteReport(hostname: string): Promise<ExtensionSiteReport | null> {
-  const res = await fetch(
-    `${WORKER_URL}/api/site/analyze?hostname=${encodeURIComponent(hostname)}`
-  );
-  if (!res.ok) return null;
-  return res.json();
+  const res = await fetch(`${WORKER_URL}/api/site/analyze?hostname=${encodeURIComponent(hostname)}`);
+  if (res.status === 200) return res.json();
+  return null;
 }
 
 function mapClause(c: any): ExtensionReportClause {

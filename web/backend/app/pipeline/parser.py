@@ -134,6 +134,13 @@ def parse_txt(file_text: str) -> ParsedDocument:
     )
 
 def parse_url(url: str) -> ParsedDocument:
+    # Reuse discovery's fetched text if available (avoids a duplicate HTTP
+    # round-trip for policy URLs that discovery already fetched+validated).
+    from ..services.url_cache import get as _url_cache_get
+    cached_text = _url_cache_get(url)
+    if cached_text:
+        return parse_txt(cached_text)
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
