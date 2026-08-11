@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Upload, FileText, ArrowLeft, AlertTriangle, CheckCircle, 
-  ShieldAlert, Printer, Copy, Check, Filter, Link
+  ShieldAlert, Printer, Copy, Check, Link, Search, 
+  Sparkles, FileCode, RefreshCw, ChevronRight
 } from 'lucide-react';
 import { ClayCard } from './ClayCard';
 import { ClayButton } from './ClayButton';
@@ -35,20 +36,27 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     reset: resetAnalysis
   } = useDocumentAnalysis();
 
-  // Filter State
-  const [filterLevel, setFilterLevel] = useState<'all' | 'high' | 'medium' | 'low' | 'standard' | 'cautionary' | 'risky'>('all');
+  // Filter & Search State
+  const [filterLevel, setFilterLevel] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Active Clause Selection
   const [selectedClause, setSelectedClause] = useState<AnalyzedClause | null>(null);
 
-  // Drag/Drop & Clipboard States
+  // View Mode State for Comparison Studio (side-by-side, original only, simplified only)
+  const [viewMode, setViewMode] = useState<'compare' | 'original' | 'simplified'>('compare');
+
+  // Drag/Drop & Input States
   const [isDragging, setIsDragging] = useState(false);
+  const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState('');
   const [pastedUrl, setPastedUrl] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // General Notification / Toast States
+  // Toast & Error States
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Demo Documents list
@@ -61,7 +69,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
         const liveDemos = await getDemoDocuments();
         setDemoDocs(liveDemos);
       } catch (e) {
-        console.warn("Using offline mock documents list:", e);
+        console.warn("Failed to fetch pre-analyzed demo documents list:", e);
       }
     }
     fetchDemos();
@@ -92,7 +100,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
   const handleCopyText = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
-    triggerToast('Copied to clipboard!');
+    triggerToast(t('copiedTextSuccess'));
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -111,48 +119,48 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     setIsDragging(false);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      startFileAnalysis(files[0]);
+      setStagedFile(files[0]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      startFileAnalysis(files[0]);
+      setStagedFile(files[0]);
     }
   };
 
   const handlePasteSubmit = () => {
     if (!pastedText.trim()) return;
     startTextAnalysis(pastedText);
-    setPastedText('');
   };
 
   const handleUrlSubmit = () => {
     const trimmed = pastedUrl.trim();
     if (!trimmed) return;
     if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      setToastMessage('Please enter a valid URL starting with http:// or https://');
-      setTimeout(() => setToastMessage(null), 4000);
+      const errMsg = 'Please enter a valid URL starting with http:// or https://';
+      setUrlError(errMsg);
+      triggerToast(errMsg);
       return;
     }
+    setUrlError(null);
     startUrlAnalysis(trimmed);
-    setPastedUrl('');
   };
 
-  // Risk Level Icon Helpers (mapped to support both mock 'low' and backend 'standard')
+  // Risk Level Icon Helpers
   const getRiskIcon = (level: string) => {
     switch (level) {
       case 'high':
       case 'risky':
-        return <ShieldAlert className="text-red-600" size={18} />;
+        return <ShieldAlert className="text-red-600 shrink-0" size={18} />;
       case 'medium':
       case 'cautionary':
-        return <AlertTriangle className="text-yellow-600" size={18} />;
+        return <AlertTriangle className="text-amber-600 shrink-0" size={18} />;
       case 'low':
       case 'standard':
       default:
-        return <CheckCircle className="text-green-600" size={18} />;
+        return <CheckCircle className="text-emerald-600 shrink-0" size={18} />;
     }
   };
 
@@ -163,43 +171,94 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
         return 'bg-red-100 text-red-800 border border-red-200';
       case 'medium':
       case 'cautionary':
-        return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+        return 'bg-amber-100 text-amber-900 border border-amber-200';
       case 'low':
       case 'standard':
       default:
-        return 'bg-green-100 text-green-800 border border-green-200';
+        return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
     }
   };
 
-  const { riskyCount, cautionaryCount, standardCount } = useMemo(() => {
+  // Metrics computation
+  const { riskyCount, cautionaryCount, standardCount, categories } = useMemo(() => {
     let risky = 0, cautionary = 0, standard = 0;
+    const catSet = new Set<string>();
     if (currentDoc) {
       for (const clause of currentDoc.clauses) {
+        if (clause.category) catSet.add(clause.category);
         if (clause.riskLevel === 'risky') risky++;
         else if (clause.riskLevel === 'cautionary') cautionary++;
         else standard++;
       }
     }
-    return { riskyCount: risky, cautionaryCount: cautionary, standardCount: standard };
+    return { 
+      riskyCount: risky, 
+      cautionaryCount: cautionary, 
+      standardCount: standard,
+      categories: Array.from(catSet)
+    };
   }, [currentDoc?.clauses]);
 
+  // Filtered clauses list
   const filteredClauses = useMemo(() => {
     if (!currentDoc) return [];
     return currentDoc.clauses.filter((clause: AnalyzedClause) => {
-      if (filterLevel === 'all') return true;
+      // Risk filter
+      if (filterLevel !== 'all') {
+        if (filterLevel === 'low') {
+          if (clause.riskLevel !== 'standard') return false;
+        } else if (filterLevel === 'medium') {
+          if (clause.riskLevel !== 'cautionary') return false;
+        } else if (filterLevel === 'high') {
+          if (clause.riskLevel !== 'risky') return false;
+        }
+      }
       
-      if (filterLevel === 'low' || filterLevel === 'standard') {
-        return clause.riskLevel === 'standard';
+      // Category filter
+      if (selectedCategory !== 'all' && clause.category !== selectedCategory) {
+        return false;
       }
-      if (filterLevel === 'medium' || filterLevel === 'cautionary') {
-        return clause.riskLevel === 'cautionary';
+
+      // Keyword search filter
+      if (searchQuery.trim() !== '') {
+        const query = searchQuery.toLowerCase();
+        const matchTitle = clause.title?.toLowerCase().includes(query);
+        const matchOriginal = clause.originalText?.toLowerCase().includes(query);
+        const matchSimplified = clause.simplifiedText?.toLowerCase().includes(query);
+        const matchCategory = clause.category?.toLowerCase().includes(query);
+        if (!matchTitle && !matchOriginal && !matchSimplified && !matchCategory) {
+          return false;
+        }
       }
-      if (filterLevel === 'high' || filterLevel === 'risky') {
-        return clause.riskLevel === 'risky';
-      }
-      return clause.riskLevel === filterLevel;
+
+      return true;
     });
-  }, [currentDoc?.clauses, filterLevel]);
+  }, [currentDoc?.clauses, filterLevel, selectedCategory, searchQuery]);
+
+  // Keyboard navigation through clauses
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!currentDoc || filteredClauses.length === 0) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      const currentIndex = selectedClause 
+        ? filteredClauses.findIndex(c => c.id === selectedClause.id)
+        : -1;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextIndex = Math.min(currentIndex + 1, filteredClauses.length - 1);
+        setSelectedClause(filteredClauses[nextIndex]);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        setSelectedClause(filteredClauses[prevIndex]);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentDoc, filteredClauses, selectedClause]);
 
   const getClayCardVariant = (level: string): 'default' | 'low' | 'medium' | 'high' => {
     switch (level) {
@@ -217,448 +276,861 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
     }
   };
 
+
+
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 min-h-screen">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 min-h-screen">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
           <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-brand-ink text-white px-4 py-2.5 rounded-full text-xs font-bold shadow-lg flex items-center space-x-2"
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-white text-gray-900 px-5 py-3 rounded-full text-xs font-extrabold shadow-2xl flex items-center space-x-2.5 border border-orange-200"
           >
-            <CheckCircle size={14} className="text-green-400" />
-            <span>{toastMessage}</span>
+            <AlertTriangle size={15} className="text-amber-500 shrink-0" />
+            <span className="text-gray-900 font-bold">{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Header Panel */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-        <div className="flex items-center space-x-4">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4 pb-4 border-b border-orange-100/60">
+        <div className="flex items-center space-x-3.5">
           <ClayButton 
             variant="secondary" 
             onClick={() => {
               resetAnalysis();
               onBackToHome();
             }} 
-            className="p-3!"
+            className="p-3! rounded-2xl"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={18} />
           </ClayButton>
           <div>
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{t('simplificationSuite')}</span>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-800">
+            {currentDoc && (
+              <div className="flex items-center space-x-2">
+                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                  • {currentDoc.clauses.length} Clauses Analyzed
+                </span>
+              </div>
+            )}
+            <h1 className="text-2xl md:text-3xl font-black text-brand-ink tracking-tight mt-0.5">
               {currentDoc ? currentDoc.filename : t('dynamicUpload')}
             </h1>
           </div>
         </div>
 
         {currentDoc && (
-          <div className="flex space-x-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <ClayButton 
-              variant="secondary" 
-              onClick={() => {
-                navigator.clipboard.writeText(window.location.href);
-                triggerToast(t('shareLinkToast'));
-              }}
-              icon={<Link size={15} />}
+              variant="primary" 
+              onClick={resetAnalysis}
+              icon={<RefreshCw size={15} />}
+              className="text-xs px-4 py-2"
             >
-              {t('shareLink')}
-            </ClayButton>
-            <ClayButton 
-              variant="secondary" 
-              onClick={() => window.print()}
-              icon={<Printer size={15} />}
-            >
-              {t('print')}
+              Analyze New
             </ClayButton>
           </div>
         )}
       </div>
 
-      {/* Main Switch: Upload Screen vs. Workspace Dashboard */}
+      {/* BEFORE ANALYSIS STATE: Layout inspired by user request */}
       {!currentDoc ? (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* File Upload Zone */}
-          <div className="lg:col-span-7 space-y-6">
-            <h2 className="text-xl font-bold text-gray-700">{t('chooseAgreement')}</h2>
-            
-            {analysisError && (
-              <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-2xl text-sm font-semibold flex items-center justify-between shadow-xs">
+        <div className="space-y-6">
+          {/* Analysis Error Alert */}
+          {analysisError && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 bg-red-50 border-2 border-red-200 text-red-900 rounded-2xl text-xs font-bold flex items-center justify-between shadow-xs"
+            >
+              <div className="flex items-center space-x-2">
+                <ShieldAlert size={18} className="text-red-600 shrink-0" />
                 <span>{analysisError}</span>
-                <button 
-                  onClick={resetAnalysis} 
-                  className="bg-red-200 text-red-900 px-3 py-1 rounded-full text-xs font-bold hover:bg-red-300 cursor-pointer transition-colors"
-                >
-                  {t('clear')}
-                </button>
               </div>
-            )}
-            
-            {isAnalyzing ? (
-              <ClayCard className="flex flex-col items-center justify-center py-20 text-center space-y-4 border border-orange-100">
-                <div className="relative w-20 h-20">
-                  <div className="absolute inset-0 rounded-full border-4 border-orange-100" />
-                  <div className="absolute inset-0 rounded-full border-4 border-orange-500 border-t-transparent animate-spin" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="font-bold text-lg text-gray-700">{progressStep}</h3>
-                  {progressPercentage !== null && (
-                    <div className="w-48 bg-orange-100 h-2 rounded-full mx-auto overflow-hidden p-px">
-                      <div className="bg-orange-500 h-full rounded-full transition-all duration-300" style={{ width: `${progressPercentage}%` }} />
-                    </div>
-                  )}
-                </div>
-              </ClayCard>
-            ) : (
-              <div 
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`
-                  cursor-pointer text-center py-20 px-6 rounded-3xl border-3 border-dashed
-                  transition-all duration-300 flex flex-col items-center justify-center space-y-4
-                  ${isDragging 
-                    ? 'border-orange-500 bg-orange-50/50 scale-[1.01]' 
-                    : 'border-orange-200 bg-white hover:border-orange-400 hover:scale-[1.005]'
-                  }
-                  shadow-[0_12px_24px_-10px_rgba(249,115,22,0.05),inset_2px_2px_5px_rgba(255,255,255,0.9),inset_-4px_-4px_10px_rgba(249,115,22,0.04)]
-                `}
+              <button 
+                onClick={resetAnalysis} 
+                className="bg-red-200 text-red-900 px-3 py-1 rounded-full text-xs font-bold hover:bg-red-300 cursor-pointer transition-colors"
               >
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleFileChange}
-                  accept=".pdf,.doc,.docx,.txt" 
-                  className="hidden" 
-                />
-                <div className="w-16 h-16 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center clay-inner-ring">
-                  <Upload size={32} />
+                {t('clear')}
+              </button>
+            </motion.div>
+          )}
+
+          {/* Loading Stepper / Pipeline Progress View */}
+          {isAnalyzing ? (
+            <ClayCard className="flex flex-col items-center justify-center py-16 text-center space-y-6 border-2 border-orange-200/80 bg-white">
+              <div className="relative w-24 h-24">
+                <div className="absolute inset-0 rounded-full border-4 border-orange-100" />
+                <div className="absolute inset-0 rounded-full border-4 border-orange-500 border-t-transparent animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center text-orange-600">
+                  <Sparkles className="animate-pulse" size={28} />
                 </div>
-                <div className="space-y-1">
-                  <h3 className="text-lg font-bold text-gray-700">{t('dragDropFile')}</h3>
-                  <p className="text-xs text-gray-400">{t('fileLimits')}</p>
-                </div>
-                <span className="text-xs font-semibold text-orange-500 bg-orange-50 border border-orange-100 rounded-full px-4 py-1.5 shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.8)]">
-                  {t('browseFiles')}
+              </div>
+
+              <div className="space-y-3 max-w-sm">
+                <span className="text-[10px] font-extrabold text-orange-500 uppercase tracking-widest bg-orange-50 border border-orange-100 px-3 py-1 rounded-full">
+                  {t('analyzingStage')}
                 </span>
-              </div>
-            )}
-
-            {/* Pasted Text Option */}
-            <ClayCard className="space-y-4 p-6 border border-orange-100 bg-[#FFFDFB]">
-              <div className="flex items-center space-x-2">
-                <FileText size={18} className="text-orange-500" />
-                <h3 className="font-bold text-gray-700">{t('pasteAgreement')}</h3>
-              </div>
-              <textarea
-                value={pastedText}
-                onChange={(e) => setPastedText(e.target.value)}
-                placeholder="Paste the lease clauses, liability declarations, terms rules here..."
-                rows={6}
-                className="w-full clay-input rounded-2xl! p-4 text-sm resize-none font-mono focus:border-orange-500"
-              />
-              <div className="flex justify-end">
-                <ClayButton 
-                  variant="primary" 
-                  onClick={handlePasteSubmit}
-                  disabled={!pastedText.trim() || isAnalyzing}
-                  className="disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {t('analyzePasted')}
-                </ClayButton>
-              </div>
-            </ClayCard>
-
-            {/* Pasted URL Option */}
-            <ClayCard className="space-y-4 p-6 border border-orange-100 bg-[#FFFDFB]">
-              <div className="flex items-center space-x-2">
-                <Link size={18} className="text-orange-500" />
-                <h3 className="font-bold text-gray-700">{t('pasteWebsiteUrl')}</h3>
-              </div>
-              <input
-                type="url"
-                value={pastedUrl}
-                onChange={(e) => setPastedUrl(e.target.value)}
-                placeholder="https://example.com/terms"
-                className="w-full clay-input rounded-2xl! p-4 text-sm font-mono focus:border-orange-500"
-              />
-              <div className="flex justify-end">
-                <ClayButton 
-                  variant="primary" 
-                  onClick={handleUrlSubmit}
-                  disabled={!pastedUrl.trim() || isAnalyzing}
-                  className="disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {t('fetchAndAnalyze')}
-                </ClayButton>
-              </div>
-            </ClayCard>
-          </div>
-
-          {/* Quick Start Presets */}
-          <div className="lg:col-span-5 space-y-6">
-            <h2 className="text-xl font-bold text-gray-700">{t('tryStandard')}</h2>
-            <div className="grid gap-4">
-              {demoDocs.map((doc) => (
-                <div 
-                  key={doc.id}
-                  onClick={() => {
-                    startDemoAnalysis(doc.id);
-                  }}
-                  className="cursor-pointer group"
-                >
-                  <ClayCard className="p-5 border-2 border-orange-100 hover:border-orange-300 bg-white transition-all duration-300">
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-bold text-gray-800 group-hover:text-orange-600 transition-colors">
-                        {doc.filename || doc.title}
-                      </h3>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                        doc.documentType === 'tos' || doc.type === 'tos' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
-                      }`}>
-                        {doc.documentType === 'tos' || doc.type === 'tos' ? 'Terms' : 'Lease'}
-                      </span>
+                <h3 className="font-extrabold text-lg text-brand-ink">{progressStep || t('readingFile')}</h3>
+                
+                {progressPercentage !== null && (
+                  <div className="space-y-1.5">
+                    <div className="w-64 bg-orange-100/70 h-2.5 rounded-full mx-auto overflow-hidden p-0.5 border border-orange-200/40">
+                      <div 
+                        className="bg-orange-500 h-full rounded-full transition-all duration-300 shadow-sm" 
+                        style={{ width: `${progressPercentage}%` }} 
+                      />
                     </div>
-                    <p className="text-xs text-gray-500 leading-relaxed mt-2">{doc.summary}</p>
-                    <div className="mt-4 flex items-center space-x-4 text-xs font-semibold">
-                      <span className="text-gray-400">{t('healthLabel')}</span>
-                      <span className={`font-extrabold ${doc.healthScore > 60 ? 'text-green-600' : 'text-red-500'}`}>
-                        {doc.healthScore}/100
-                      </span>
+                    <span className="text-[11px] font-bold text-gray-500">{progressPercentage}% Complete</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Pipeline Stages checklist - Dynamic Real-Time Status */}
+              <div className="grid grid-cols-2 gap-2.5 text-[11px] font-semibold text-gray-600 pt-2 text-left max-w-xs">
+                {/* Stage 1: Parsing structure (0-25%) */}
+                <div className="flex items-center space-x-1.5">
+                  {(progressPercentage ?? 0) >= 25 ? (
+                    <CheckCircle size={13} className="text-emerald-500 shrink-0" />
+                  ) : (progressPercentage ?? 0) >= 5 ? (
+                    <Sparkles size={13} className="text-orange-500 animate-pulse shrink-0" />
+                  ) : (
+                    <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
+                  )}
+                  <span className={(progressPercentage ?? 0) >= 25 ? "text-gray-800 font-bold" : ""}>Parsing structure</span>
+                </div>
+
+                {/* Stage 2: Hashing clauses (25-50%) */}
+                <div className="flex items-center space-x-1.5">
+                  {(progressPercentage ?? 0) >= 50 ? (
+                    <CheckCircle size={13} className="text-emerald-500 shrink-0" />
+                  ) : (progressPercentage ?? 0) >= 25 ? (
+                    <Sparkles size={13} className="text-orange-500 animate-pulse shrink-0" />
+                  ) : (
+                    <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
+                  )}
+                  <span className={(progressPercentage ?? 0) >= 50 ? "text-gray-800 font-bold" : ""}>Hashing clauses</span>
+                </div>
+
+                {/* Stage 3: RAG Standard match (50-75%) */}
+                <div className="flex items-center space-x-1.5">
+                  {(progressPercentage ?? 0) >= 75 ? (
+                    <CheckCircle size={13} className="text-emerald-500 shrink-0" />
+                  ) : (progressPercentage ?? 0) >= 50 ? (
+                    <Sparkles size={13} className="text-orange-500 animate-pulse shrink-0" />
+                  ) : (
+                    <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
+                  )}
+                  <span className={(progressPercentage ?? 0) >= 75 ? "text-gray-800 font-bold" : ""}>RAG Standard match</span>
+                </div>
+
+                {/* Stage 4: Risk scoring (75-100%) */}
+                <div className="flex items-center space-x-1.5">
+                  {(progressPercentage ?? 0) >= 100 ? (
+                    <CheckCircle size={13} className="text-emerald-500 shrink-0" />
+                  ) : (progressPercentage ?? 0) >= 75 ? (
+                    <Sparkles size={13} className="text-orange-500 animate-pulse shrink-0" />
+                  ) : (
+                    <span className="w-3 h-3 rounded-full border border-gray-300 inline-block shrink-0" />
+                  )}
+                  <span className={(progressPercentage ?? 0) >= 100 ? "text-gray-800 font-bold" : ""}>Risk scoring</span>
+                </div>
+              </div>
+
+              <button 
+                onClick={resetAnalysis} 
+                className="text-xs text-gray-400 underline hover:text-gray-600 cursor-pointer pt-2"
+              >
+                {t('cancelAnalysis')}
+              </button>
+            </ClayCard>
+          ) : (
+            /* Main 2-Column Section Layout */
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                
+                {/* LEFT CARD: Main Upload Zone (col-span-7) */}
+                <ClayCard className="lg:col-span-7 flex flex-col justify-between p-6 border-2 border-orange-100 bg-white shadow-sm">
+                  
+                  {/* Top Header Row */}
+                  <div className="flex items-center justify-between pb-3 border-b border-orange-100/60">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                        <Upload size={15} />
+                      </div>
+                      <h3 className="font-extrabold text-base text-brand-ink">{t('chooseAgreement')}</h3>
+                    </div>
+
+                    {/* Format badges on top right */}
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">PDF</span>
+                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">DOCX</span>
+                      <span className="text-[10px] font-extrabold text-gray-500 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 uppercase">TXT</span>
+                    </div>
+                  </div>
+
+                  {/* Inner Dashed Drag & Drop Box */}
+                  <div 
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`
+                      my-5 cursor-pointer text-center py-12 px-6 rounded-2xl border-2 border-dashed
+                      transition-all duration-200 flex flex-col items-center justify-center space-y-3.5
+                      ${isDragging 
+                        ? 'border-orange-500 bg-orange-50/70 scale-[1.01]' 
+                        : 'border-orange-200/80 bg-[#FFFDFB] hover:border-orange-400 hover:bg-orange-50/20'
+                      }
+                    `}
+                  >
+                    <input 
+                      type="file" 
+                      ref={fileInputRef} 
+                      onChange={handleFileChange}
+                      accept=".pdf,.doc,.docx,.txt" 
+                      className="hidden" 
+                    />
+
+                    <div className="w-12 h-12 rounded-full bg-orange-100/70 text-orange-600 flex items-center justify-center shadow-xs">
+                      <Upload size={22} />
+                    </div>
+
+                    <div className="space-y-1 max-w-sm">
+                      <h4 className="text-base font-extrabold text-brand-ink leading-snug">{t('dragDropFile')}</h4>
+                      <p className="text-xs text-gray-400">{t('fileLimits')}</p>
+                    </div>
+
+                    {/* Staged File Badge or Browse Button */}
+                    {stagedFile ? (
+                      <div className="flex items-center space-x-2 bg-orange-100/80 text-orange-950 px-3.5 py-1.5 rounded-full border border-orange-200 text-xs font-bold">
+                        <FileText size={14} className="text-orange-600 shrink-0" />
+                        <span className="truncate max-w-[200px]">{stagedFile.name}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setStagedFile(null);
+                          }}
+                          className="hover:text-red-600 font-bold ml-1 cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      /* Black Pill Browse Button */
+                      <button
+                        type="button"
+                        className="mt-1 px-5 py-2.5 rounded-full bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-md transition-all flex items-center space-x-1.5 cursor-pointer"
+                      >
+                        <span>{t('browseFiles')}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Bottom Footer Row */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2 border-t border-orange-100/50">
+                    <p className="text-[11px] text-gray-400 leading-relaxed max-w-xs">
+                      Files are processed securely in real-time. Encryption applies at rest and in transit.
+                    </p>
+
+                    <ClayButton
+                      variant="primary"
+                      onClick={() => {
+                        if (stagedFile) {
+                          startFileAnalysis(stagedFile);
+                        } else {
+                          fileInputRef.current?.click();
+                        }
+                      }}
+                      disabled={!stagedFile || isAnalyzing}
+                      className="text-xs px-6 py-3 w-full sm:w-auto shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {t('analyzeAgreement')}
+                    </ClayButton>
+                  </div>
+                </ClayCard>
+
+                {/* RIGHT COLUMN: Stacked Paste Text + Web URL Cards (col-span-5) */}
+                <div className="lg:col-span-5 space-y-6 flex flex-col justify-between">
+                  
+                  {/* Top Right Card: Paste Raw Text */}
+                  <ClayCard className="p-5 border-2 border-orange-100 bg-white space-y-3.5 flex-1 flex flex-col justify-between shadow-sm">
+                    <div>
+                      <div className="flex items-center justify-between pb-2 border-b border-orange-100/50">
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
+                            <FileText size={15} />
+                          </div>
+                          <h3 className="font-extrabold text-sm text-brand-ink">{t('pasteAgreement')}</h3>
+                        </div>
+                        <span className="text-[10px] font-mono text-gray-400 font-bold">{pastedText.length} CHARS</span>
+                      </div>
+
+                      <div className="relative mt-3">
+                        <textarea
+                          value={pastedText}
+                          onChange={(e) => setPastedText(e.target.value)}
+                          placeholder="Paste contract clauses or agreement sections for targeted risk assessment..."
+                          rows={4}
+                          className="w-full clay-input rounded-2xl! p-3.5 text-xs resize-none font-mono focus:border-orange-500 text-gray-700 leading-relaxed bg-[#FFFDFB]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-orange-100/40 mt-2">
+                      <span className="text-[10px] text-gray-400 font-semibold">Minimum 50 words recommended.</span>
+                      <ClayButton
+                        variant="primary"
+                        onClick={handlePasteSubmit}
+                        disabled={!pastedText.trim() || isAnalyzing}
+                        className="text-[11px] px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {t('analyzePasted')}
+                      </ClayButton>
                     </div>
                   </ClayCard>
+
+                  {/* Bottom Right Card: Web URL Input */}
+                  <ClayCard className="p-5 border-2 border-orange-100 bg-white space-y-3 shadow-sm">
+                    <div className="flex items-center space-x-2.5 pb-2 border-b border-orange-100/50">
+                      <div className="w-7 h-7 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                        <Link size={15} />
+                      </div>
+                      <h3 className="font-extrabold text-sm text-brand-ink">{t('pasteWebsiteUrl')}</h3>
+                    </div>
+
+                    {/* URL Input Row with Right Arrow Circle Button */}
+                    <div className="flex items-center space-x-2 pt-1">
+                      <input
+                        type="url"
+                        value={pastedUrl}
+                        onChange={(e) => {
+                          setPastedUrl(e.target.value);
+                          if (urlError) setUrlError(null);
+                        }}
+                        placeholder="https://example.com/terms"
+                        className="flex-1 clay-input rounded-full! px-4 py-2.5 text-xs font-mono focus:border-orange-500 text-gray-700 bg-[#FFFDFB]"
+                      />
+                      <ClayButton
+                        variant="primary"
+                        onClick={handleUrlSubmit}
+                        disabled={!pastedUrl.trim() || isAnalyzing}
+                        className="p-2.5! rounded-full! shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <ChevronRight size={18} />
+                      </ClayButton>
+                    </div>
+
+                    {urlError && (
+                      <p className="text-xs font-extrabold text-gray-900 bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg flex items-center space-x-1.5">
+                        <AlertTriangle size={14} className="text-red-600 shrink-0" />
+                        <span className="text-gray-900">{urlError}</span>
+                      </p>
+                    )}
+
+                    <p className="text-[11px] text-gray-400 leading-relaxed pt-0.5">
+                      Fetch terms directly from web URLs, public registries, or virtual documents.
+                    </p>
+                  </ClayCard>
                 </div>
-              ))}
+              </div>
+
+              {/* BOTTOM FULL-WIDTH HORIZONTAL STRIP: Recent / Demo Preset Templates */}
+              {demoDocs.length > 0 && (
+                <div className="bg-white/90 border-2 border-orange-100 rounded-2xl p-3.5 px-6 flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-5 shadow-xs">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0">
+                    RECENT / DEMOS
+                  </span>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {demoDocs.map((doc) => (
+                      <button
+                        key={doc.id}
+                        onClick={() => {
+                          startDemoAnalysis(doc.id);
+                          triggerToast(t('sampleContractLoaded'));
+                        }}
+                        className="px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-orange-50/70 hover:bg-orange-100 text-brand-ink border border-orange-200/60 transition-all flex items-center space-x-2 cursor-pointer shadow-2xs"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>{doc.filename || doc.title}</span>
+                        <span className="text-[9px] font-mono text-gray-400 font-bold">({doc.healthScore}%)</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       ) : (
-        /* Document Analyzer Workspace */
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        /* AFTER ANALYSIS STATE: Document Analyzer Workspace & Executive Inspector */
+        <div className="space-y-8">
           
-          {/* Sidebar Area: Health Metrics & Clause List (col-span-4) */}
-          <div className="lg:col-span-4 space-y-6">
-            
-            {/* Health Score Overview Widget */}
-            <ClayCard className="p-6 border border-orange-100 bg-[#FFFDFB] text-center space-y-4">
-              <span className="text-sm font-semibold text-gray-500">{t('healthScoreOverview')}</span>
+          {/* Executive Overview Banner & Health Gauge Header */}
+          <ClayCard className="p-6 border-2 border-orange-200/80 bg-white">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
               
-              <div className="relative inline-flex items-center justify-center p-3">
-                {/* Visual Circular Clay Dial */}
-                <div className="w-28 h-28 rounded-full bg-orange-50 border-4 border-orange-200 flex items-center justify-center shadow-[inset_0_4px_8px_rgba(0,0,0,0.06),0_10px_20px_-5px_rgba(249,115,22,0.1)]">
-                  <span className={`text-3xl font-extrabold ${
-                    (currentDoc.healthScore ?? 0) > 60 ? 'text-green-600' : 'text-red-500'
+              {/* Health Score Circular Gauge (col-span-3) */}
+              <div className="md:col-span-3 flex flex-col items-center justify-center text-center p-3 border-r-0 md:border-r border-orange-100">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{t('healthScoreOverview')}</span>
+                
+                <div className="relative inline-flex items-center justify-center">
+                  <div className={`w-28 h-28 rounded-full border-4 flex flex-col items-center justify-center shadow-inner ${
+                    (currentDoc.healthScore ?? 0) > 60 
+                      ? 'bg-emerald-50/50 border-emerald-300' 
+                      : 'bg-red-50/50 border-red-300'
                   }`}>
-                    {currentDoc.healthScore}%
+                    <span className={`text-3xl font-black tracking-tight ${
+                      (currentDoc.healthScore ?? 0) > 60 ? 'text-emerald-600' : 'text-red-600'
+                    }`}>
+                      {currentDoc.healthScore}%
+                    </span>
+                    <span className="text-[9px] uppercase font-bold text-gray-400 mt-0.5">Rating</span>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <span className={`text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full border ${
+                    (currentDoc.healthScore ?? 0) > 60 
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
+                      : 'bg-red-100 text-red-800 border-red-200'
+                  }`}>
+                    {(currentDoc.healthScore ?? 0) > 60 ? 'Fair Agreement' : 'High Risk Gotchas'}
                   </span>
                 </div>
               </div>
 
-              <div className="text-xs text-gray-500 text-center leading-relaxed">
-                {(currentDoc.healthScore ?? 0) > 60 
-                  ? 'This document is mostly balanced, but features a few sections to review.' 
-                  : 'Warning: This document contains heavily asymmetrical liability or gotcha clauses.'}
-              </div>
+              {/* Document Summary & Executive Breakdown (col-span-9) */}
+              <div className="md:col-span-9 space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <div>
+                    <span className="text-[10px] font-extrabold text-orange-600 uppercase tracking-widest bg-orange-100/70 px-2 py-0.5 rounded-md">
+                      {t('executiveSummaryTitle')}
+                    </span>
+                    <h2 className="text-xl font-black text-brand-ink mt-1">
+                      {currentDoc.filename}
+                    </h2>
+                  </div>
 
-              {/* Quick counts */}
-              <div className="grid grid-cols-3 gap-2 pt-2 text-[11px] font-bold uppercase tracking-wider">
-                <div className="bg-red-50 text-red-800 p-2 rounded-xl border border-red-100">
-                  <span className="block text-sm font-black">{riskyCount}</span>
-                  High
+                  <span className="text-xs text-gray-400 font-mono">
+                    Upload Date: {new Date(currentDoc.uploadDate || Date.now()).toLocaleDateString()}
+                  </span>
                 </div>
-                <div className="bg-yellow-50 text-yellow-800 p-2 rounded-xl border border-yellow-100">
-                  <span className="block text-sm font-black">{cautionaryCount}</span>
-                  Caution
-                </div>
-                <div className="bg-green-50 text-green-800 p-2 rounded-xl border border-green-100">
-                  <span className="block text-sm font-black">{standardCount}</span>
-                  Safe
-                </div>
-              </div>
-            </ClayCard>
 
-            {/* Clause List Filter Toolbar */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-gray-600 flex items-center">
-                  <Filter size={14} className="mr-1.5 text-orange-500" /> Filter Clauses
-                </span>
-                <span className="text-xs text-gray-400 font-bold">{filteredClauses.length} items</span>
-              </div>
-              
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { key: 'all', label: 'All' },
-                  { key: 'high', label: 'High Risk' },
-                  { key: 'medium', label: 'Caution' },
-                  { key: 'low', label: 'Safe' }
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => setFilterLevel(item.key as any)}
-                    className={`
-                      px-3 py-1.5 rounded-full text-xs font-bold border transition-all duration-200 cursor-pointer
-                      ${filterLevel === item.key 
-                        ? 'bg-orange-500 text-white border-orange-600 shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.4),0_4px_8px_-2px_rgba(249,115,22,0.3)]' 
-                        : 'bg-white text-gray-600 border-orange-100 hover:border-orange-300 hover:bg-orange-50/25 shadow-sm'
-                      }
-                    `}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+                <p className="text-xs md:text-sm text-gray-700 leading-relaxed bg-orange-50/40 p-3.5 rounded-2xl border border-orange-100">
+                  {currentDoc.summary || (
+                    (currentDoc.healthScore ?? 0) > 60 
+                      ? 'This agreement contains mostly balanced provisions, but several specific terms require careful review prior to signing.' 
+                      : 'Warning: ClarifyLaw identified severe gotchas including unilateral modification rights and asymmetric liability terms.'
+                  )}
+                </p>
+
+                {/* Risk Distribution KPI Bar */}
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="bg-red-50/80 p-3 rounded-2xl border border-red-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-red-700 uppercase tracking-wider block">Risky Gotchas</span>
+                      <span className="text-xl font-black text-red-800">{riskyCount}</span>
+                    </div>
+                    <ShieldAlert size={22} className="text-red-500 opacity-80" />
+                  </div>
+
+                  <div className="bg-amber-50/80 p-3 rounded-2xl border border-amber-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-amber-800 uppercase tracking-wider block">Caution Terms</span>
+                      <span className="text-xl font-black text-amber-900">{cautionaryCount}</span>
+                    </div>
+                    <AlertTriangle size={22} className="text-amber-500 opacity-80" />
+                  </div>
+
+                  <div className="bg-emerald-50/80 p-3 rounded-2xl border border-emerald-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block">Safe Standard</span>
+                      <span className="text-xl font-black text-emerald-900">{standardCount}</span>
+                    </div>
+                    <CheckCircle size={22} className="text-emerald-500 opacity-80" />
+                  </div>
+                </div>
               </div>
             </div>
+          </ClayCard>
 
-            {/* Scrollable Clause list */}
-            <div className="space-y-3 max-h-120 overflow-y-auto pr-1">
-              {filteredClauses.length === 0 ? (
-                <div className="text-center py-12 text-sm text-gray-400 bg-white rounded-2xl border border-orange-100 p-6">
-                  {t('noClausesMatch')}
-                </div>
-              ) : (
-                filteredClauses.map((clause: AnalyzedClause) => {
-                  const isActive = selectedClause?.id === clause.id;
-                  return (
-                    <div 
-                      key={clause.id}
-                      onClick={() => setSelectedClause(clause)}
-                      className="cursor-pointer"
+          {/* MAIN DUAL PANE WORKSPACE */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* Left Column: Clause Explorer Sidebar (col-span-4) */}
+            <div className="lg:col-span-4 space-y-4">
+              
+              {/* Search & Filter Toolbar */}
+              <ClayCard className="p-4 border border-orange-100 bg-[#FFFDFB] space-y-3">
+                
+                {/* Search Input */}
+                <div className="relative">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={t('searchClausesPlaceholder')}
+                    className="w-full clay-input pl-9 pr-4 py-2 text-xs focus:border-orange-500 text-gray-700"
+                  />
+                  {searchQuery && (
+                    <button 
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 hover:text-gray-600 cursor-pointer"
                     >
-                      <ClayCard 
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                {/* Severity Risk Filters */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">Risk Severity</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { key: 'all', label: 'All', count: currentDoc.clauses.length },
+                      { key: 'high', label: 'Risky', count: riskyCount },
+                      { key: 'medium', label: 'Caution', count: cautionaryCount },
+                      { key: 'low', label: 'Safe', count: standardCount }
+                    ].map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setFilterLevel(item.key as any)}
                         className={`
-                          p-4 border-2 transition-all duration-300 bg-white
-                          ${isActive 
-                            ? 'border-orange-500 scale-[1.01] shadow-[0_12px_24px_-8px_rgba(249,115,22,0.15)]' 
-                            : 'border-orange-100/60 hover:border-orange-300'
+                          px-2.5 py-1 rounded-full text-xs font-extrabold transition-all duration-150 cursor-pointer flex items-center space-x-1
+                          ${filterLevel === item.key 
+                            ? 'bg-orange-500 text-white shadow-sm' 
+                            : 'bg-white text-gray-600 border border-orange-100 hover:bg-orange-50/50'
                           }
                         `}
                       >
-                        <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <span className="text-[10px] text-gray-400 block mb-1 font-bold uppercase tracking-wider">
-                              {clause.category.replace(/_/g, ' ')}
-                            </span>
-                            <h4 className="font-bold text-sm text-gray-800 leading-tight">
+                        <span>{item.label}</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                          filterLevel === item.key ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800'
+                        }`}>
+                          {item.count}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Category Filter Dropdown (if multiple categories exist) */}
+                {categories.length > 0 && (
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">{t('riskCategoryFilter')}</span>
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="w-full bg-white border border-orange-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:border-orange-500 cursor-pointer"
+                    >
+                      <option value="all">{t('allCategories')}</option>
+                      {categories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat.replace(/_/g, ' ').toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1 border-t border-orange-100 text-[10px] text-gray-400 font-semibold">
+                  <span>Showing {filteredClauses.length} of {currentDoc.clauses.length} items</span>
+                  <span>{t('clauseNavigationHint')}</span>
+                </div>
+              </ClayCard>
+
+              {/* Scrollable Clause List */}
+              <div className="space-y-2.5 max-h-[560px] overflow-y-auto pr-1">
+                {filteredClauses.length === 0 ? (
+                  <div className="text-center py-12 text-xs font-semibold text-gray-400 bg-white rounded-2xl border border-orange-100 p-6">
+                    {t('noClausesMatch')}
+                  </div>
+                ) : (
+                  filteredClauses.map((clause: AnalyzedClause) => {
+                    const isActive = selectedClause?.id === clause.id;
+                    const isRisky = clause.riskLevel === 'risky';
+                    const isCaution = clause.riskLevel === 'cautionary';
+                    
+                    return (
+                      <div 
+                        key={clause.id}
+                        onClick={() => setSelectedClause(clause)}
+                        className="cursor-pointer"
+                      >
+                        <ClayCard 
+                          className={`
+                            p-3.5 border-2 transition-all duration-200 bg-white relative overflow-hidden
+                            ${isActive 
+                              ? 'border-orange-500 scale-[1.01] shadow-md bg-orange-50/20' 
+                              : 'border-orange-100/70 hover:border-orange-300 hover:bg-orange-50/10'
+                            }
+                          `}
+                        >
+                          {/* Left Accent Severity Line */}
+                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
+                            isRisky ? 'bg-red-500' : isCaution ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`} />
+
+                          <div className="pl-1 space-y-1">
+                            <div className="flex justify-between items-start gap-2">
+                              <span className="text-[9px] text-gray-400 font-extrabold uppercase tracking-wider block">
+                                {clause.category.replace(/_/g, ' ')}
+                              </span>
+                              <span className={`text-[9px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full flex items-center space-x-1 shrink-0 ${
+                                getRiskBadgeColor(clause.riskLevel)
+                              }`}>
+                                {getRiskIcon(clause.riskLevel)}
+                                <span className="ml-1">
+                                  {isCaution ? 'Caution' : isRisky ? 'Risky' : 'Safe'}
+                                </span>
+                              </span>
+                            </div>
+
+                            <h4 className="font-bold text-xs text-brand-ink leading-snug line-clamp-1">
                               {clause.title}
                             </h4>
+
+                            <p className="text-[11px] text-gray-500 line-clamp-2 leading-relaxed">
+                              {clause.simplifiedText}
+                            </p>
                           </div>
-                          <span className={`text-[9px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full flex items-center space-x-1 shrink-0 ${
-                            getRiskBadgeColor(clause.riskLevel)
-                          }`}>
-                            {getRiskIcon(clause.riskLevel)}
-                            <span className="ml-1">
-                              {clause.riskLevel === 'cautionary' ? 'Caution' :
-                               clause.riskLevel === 'standard' ? 'Safe' : 'Risky'}
+                        </ClayCard>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Right Column: Detailed Comparison Studio (col-span-8) */}
+            <div className="lg:col-span-8">
+              {selectedClause ? (
+                <div className="space-y-6">
+                  
+                  {/* View Mode Switcher Header */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3 rounded-2xl border border-orange-100 shadow-xs">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-[10px] font-extrabold text-orange-600 uppercase tracking-widest bg-orange-100 px-2 py-0.5 rounded-md">
+                        {selectedClause.category.replace(/_/g, ' ')}
+                      </span>
+                      <h3 className="font-black text-base text-brand-ink">
+                        {selectedClause.title}
+                      </h3>
+                    </div>
+
+                    {/* View Mode Tabs */}
+                    <div className="flex p-1 bg-orange-50 rounded-xl border border-orange-100">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('compare')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          viewMode === 'compare' ? 'bg-orange-500 text-white shadow-xs' : 'text-gray-600 hover:text-orange-600'
+                        }`}
+                      >
+                        {t('viewModeCompare')}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('original')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          viewMode === 'original' ? 'bg-orange-500 text-white shadow-xs' : 'text-gray-600 hover:text-orange-600'
+                        }`}
+                      >
+                        {t('viewModeOriginal')}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setViewMode('simplified')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          viewMode === 'simplified' ? 'bg-orange-500 text-white shadow-xs' : 'text-gray-600 hover:text-orange-600'
+                        }`}
+                      >
+                        {t('viewModeSimplified')}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Dynamic View Panes */}
+                  {viewMode === 'compare' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      
+                      {/* Original Legalese Card */}
+                      <ClayCard className="border-2 border-orange-100/70 bg-[#FDFBF9] flex flex-col justify-between h-full">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between pb-3 border-b border-orange-100">
+                            <div className="flex items-center space-x-2">
+                              <FileCode size={16} className="text-gray-500" />
+                              <h3 className="font-bold text-xs text-gray-600 uppercase tracking-widest">{t('originalProvision')}</h3>
+                            </div>
+                            {selectedClause.sectionLocation && (
+                              <span className="text-[10px] font-mono text-gray-400 bg-white px-2 py-0.5 rounded-md border border-orange-100">
+                                Location: {selectedClause.sectionLocation}
+                              </span>
+                            )}
+                          </div>
+                          
+                          <p className="font-mono text-xs text-gray-700 leading-relaxed bg-white p-4 rounded-2xl border border-orange-100 shadow-inner max-h-80 overflow-y-auto whitespace-pre-wrap">
+                            {selectedClause.originalText}
+                          </p>
+                        </div>
+                        
+                        <div className="flex justify-end pt-4">
+                          <ClayButton 
+                            variant="secondary" 
+                            className="px-3.5! py-1.5! text-xs"
+                            onClick={() => handleCopyText(selectedClause.originalText, 'orig')}
+                          >
+                            {copiedId === 'orig' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                            <span className="ml-1.5">{t('copyOriginalText')}</span>
+                          </ClayButton>
+                        </div>
+                      </ClayCard>
+
+                      {/* Simplified Plain English Card */}
+                      <ClayCard className="border-2 border-orange-200 bg-[#FFFDFB] flex flex-col justify-between h-full">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between pb-3 border-b border-orange-100">
+                            <div className="flex items-center space-x-2">
+                              <Sparkles size={16} className="text-orange-500" />
+                              <h3 className="font-bold text-xs text-orange-800 uppercase tracking-widest">{t('simplifiedTranslation')}</h3>
+                            </div>
+                            <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                              Plain English
                             </span>
-                          </span>
+                          </div>
+
+                          <div className="p-4 bg-orange-50/40 rounded-2xl border border-orange-100 space-y-2">
+                            <p className="text-sm font-semibold text-brand-ink leading-relaxed">
+                              {selectedClause.simplifiedText}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-4">
+                          <ClayButton 
+                            variant="secondary" 
+                            className="px-3.5! py-1.5! text-xs"
+                            onClick={() => handleCopyText(selectedClause.simplifiedText, 'simp')}
+                          >
+                            {copiedId === 'simp' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                            <span className="ml-1.5">{t('copySimplifiedText')}</span>
+                          </ClayButton>
                         </div>
                       </ClayCard>
                     </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+                  )}
 
-          {/* Detailed Compare Pane (col-span-8) */}
-          <div className="lg:col-span-8">
-            {selectedClause ? (
-              <div className="space-y-6">
-                
-                {/* Side-by-Side Panel */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
-                  {/* Original Legalese */}
-                  <ClayCard className="border-2 border-orange-100/50 bg-[#FDFBF9] flex flex-col justify-between h-full">
-                    <div>
-                      <div className="flex items-center space-x-2 pb-3 mb-4 border-b border-orange-100/50">
-                        <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
-                        <h3 className="font-bold text-sm text-gray-600 uppercase tracking-widest">{t('originalProvision')}</h3>
+                  {viewMode === 'original' && (
+                    <ClayCard className="border-2 border-orange-100 bg-white p-6 space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-orange-100">
+                        <h3 className="font-bold text-sm text-gray-700 uppercase tracking-widest">{t('originalProvision')}</h3>
+                        <ClayButton 
+                          variant="secondary" 
+                          className="px-3.5! py-1.5! text-xs"
+                          onClick={() => handleCopyText(selectedClause.originalText, 'orig')}
+                        >
+                          {copiedId === 'orig' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                          <span className="ml-1.5">{t('copy')}</span>
+                        </ClayButton>
                       </div>
-                      <p className="font-mono text-xs text-gray-600 leading-relaxed bg-white p-4 rounded-xl border border-orange-100 shadow-[inset_0_2px_4px_rgba(0,0,0,0.02)] wrap-break-word max-h-72 overflow-y-auto">
+
+                      <p className="font-mono text-sm text-gray-800 leading-relaxed bg-[#FDFBF9] p-5 rounded-2xl border border-orange-100 whitespace-pre-wrap">
                         {selectedClause.originalText}
                       </p>
-                    </div>
-                    
-                    <div className="flex justify-end pt-4">
-                      <ClayButton 
-                        variant="secondary" 
-                        className="px-3.5! py-2!"
-                        onClick={() => handleCopyText(selectedClause.originalText, 'orig')}
-                      >
-                        {copiedId === 'orig' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                        <span className="text-xs ml-1.5">{t('copy')}</span>
-                      </ClayButton>
-                    </div>
-                  </ClayCard>
+                    </ClayCard>
+                  )}
 
-                  {/* Plain English Translation */}
-                  <ClayCard className="border-2 border-orange-100 flex flex-col justify-between h-full bg-[#FFFDFB]">
-                    <div>
-                      <div className="flex items-center space-x-2 pb-3 mb-4 border-b border-orange-100">
-                        <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                  {viewMode === 'simplified' && (
+                    <ClayCard className="border-2 border-orange-200 bg-[#FFFDFB] p-6 space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-orange-100">
                         <h3 className="font-bold text-sm text-orange-800 uppercase tracking-widest">{t('simplifiedTranslation')}</h3>
+                        <ClayButton 
+                          variant="secondary" 
+                          className="px-3.5! py-1.5! text-xs"
+                          onClick={() => handleCopyText(selectedClause.simplifiedText, 'simp')}
+                        >
+                          {copiedId === 'simp' ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                          <span className="ml-1.5">{t('copyTranslation')}</span>
+                        </ClayButton>
                       </div>
-                      <p className="text-base font-semibold text-gray-800 leading-relaxed p-4 bg-orange-50/30 rounded-xl border border-orange-100">
+
+                      <p className="text-base font-semibold text-gray-900 leading-relaxed bg-orange-50/50 p-5 rounded-2xl border border-orange-100">
                         {selectedClause.simplifiedText}
                       </p>
+                    </ClayCard>
+                  )}
+
+                  {/* RAG Reference & Gotcha Analysis Card (Bottom) */}
+                  <ClayCard 
+                    variant={getClayCardVariant(selectedClause.riskLevel)}
+                    className="space-y-4 p-6"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      {getRiskIcon(selectedClause.riskLevel)}
+                      <h3 className="font-black text-base uppercase tracking-wide">
+                        {selectedClause.riskLevel === 'risky'
+                          ? 'High-Risk Gotcha Identified' 
+                          : selectedClause.riskLevel === 'cautionary'
+                          ? 'Clause Deviation Flagged'
+                          : 'Standard Safe Terms Confirmed'}
+                      </h3>
                     </div>
 
-                    <div className="flex justify-end pt-4">
-                      <ClayButton 
-                        variant="secondary" 
-                        className="px-3.5! py-2!"
-                        onClick={() => handleCopyText(selectedClause.simplifiedText, 'simp')}
-                      >
-                        {copiedId === 'simp' ? <Check size={14} className="text-green-600" /> : <Copy size={14} />}
-                        <span className="text-xs ml-1.5">{t('copyTranslation')}</span>
-                      </ClayButton>
+                    <div className="space-y-4 text-xs md:text-sm">
+                      <div>
+                        <span className="font-extrabold block mb-1 text-[11px] uppercase tracking-wider text-gray-600">
+                          {t('whyThisMatters')}
+                        </span>
+                        <p className="font-semibold text-gray-800 leading-relaxed">
+                          {selectedClause.explanation}
+                        </p>
+                      </div>
+                      
+                      {selectedClause.ragComparison && (
+                        <div className="p-4 bg-white/80 rounded-2xl border border-white/80 shadow-xs space-y-1.5">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-orange-950 block">
+                            {t('ragDatabaseAlternative')}
+                          </span>
+                          <p className="text-gray-700 italic text-xs leading-relaxed font-mono">
+                            "{selectedClause.ragComparison}"
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Rule Flags if any exist */}
+                      {selectedClause.ruleFlags && selectedClause.ruleFlags.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Trigger Flags:</span>
+                          {selectedClause.ruleFlags.map((flag, idx) => (
+                            <span key={idx} className="text-[10px] font-bold bg-white/70 text-gray-700 px-2 py-0.5 rounded-md border border-gray-200">
+                              {flag.replace(/_/g, ' ')}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </ClayCard>
                 </div>
-
-                {/* RAG Reference comparison card (Bottom) */}
-                <ClayCard 
-                  variant={getClayCardVariant(selectedClause.riskLevel)}
-                  className="space-y-4 p-6"
-                >
-                  <div className="flex items-center space-x-2">
-                    {getRiskIcon(selectedClause.riskLevel)}
-                    <h3 className="font-extrabold text-lg uppercase tracking-wide">
-                      {selectedClause.riskLevel === 'risky'
-                        ? 'High-Risk Gotcha Identified' 
-                        : selectedClause.riskLevel === 'cautionary'
-                        ? 'Clause Deviation Flagged'
-                        : 'Standard Terms Confirmed'}
-                    </h3>
+              ) : (
+                <div className="h-96 flex flex-col items-center justify-center text-center bg-white rounded-3xl border border-orange-100 shadow-xs p-8 space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center text-orange-300">
+                    <FileText size={36} />
                   </div>
-
-                  <div className="space-y-3 text-sm">
-                    <p className="font-medium text-gray-800">
-                      <span className="font-bold block mb-1 text-xs uppercase tracking-wider text-gray-600">{t('whyThisMatters')}</span>
-                      {selectedClause.explanation}
-                    </p>
-                    
-                    <div className="p-4 bg-white/70 rounded-xl border border-white/60 shadow-[inset_0_1.5px_2px_rgba(255,255,255,0.7)] space-y-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-orange-950 block">{t('ragDatabaseAlternative')}</span>
-                      <p className="text-gray-700 italic text-xs leading-relaxed">
-                        {selectedClause.ragComparison}
-                      </p>
-                    </div>
-                  </div>
-                </ClayCard>
-              </div>
-            ) : (
-              <div className="h-96 flex flex-col items-center justify-center text-center bg-white rounded-3xl border border-orange-100 shadow-sm p-8">
-                <FileText size={48} className="text-orange-200 mb-4" />
-                <h3 className="text-lg font-bold text-gray-600">{t('noClauseSelected')}</h3>
-                <p className="text-sm text-gray-400 mt-1">{t('selectClauseDesc')}</p>
-              </div>
-            )}
+                  <h3 className="text-lg font-bold text-gray-700">{t('noClauseSelected')}</h3>
+                  <p className="text-xs text-gray-400 max-w-xs">{t('selectClauseDesc')}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

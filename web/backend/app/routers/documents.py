@@ -82,7 +82,6 @@ async def get_document(document_id: str):
 
 @router.get("/demo/all", tags=["Demo"])
 async def get_demo_documents():
-    """Returns static pre-analyzed documents for instant homepage CTA demonstration."""
-    # We load standard mock reports to ensure immediate dashboard demonstration
-    from .demo_data import MOCK_DEMOS
-    return MOCK_DEMOS
+    """Returns static pre-analyzed documents (returns [] by default as mock data is removed)."""
+    # PRELOADED_DEMOS is preserved in app.routers.demo_data for codebase reference
+    return []

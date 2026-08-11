@@ -54,7 +54,7 @@ export interface paths {
         };
         /**
          * Get Demo Documents
-         * @description Returns static pre-analyzed documents for instant homepage CTA demonstration.
+         * @description Returns static pre-analyzed documents (returns [] by default as mock data is removed).
          */
         get: operations["get_demo_documents_api_documents_demo_all_get"];
         put?: never;

@@ -17,36 +17,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     getDemoDocuments().then(setDemoDocs).catch(console.error);
   }, []);
 
-  // SVG Mock Logos
-  const mockLogos = [
-    { name: 'TenantUnion', svg: (
-      <svg className="h-7 opacity-75 text-orange-900" viewBox="0 0 120 30" fill="currentColor">
-        <rect x="5" y="5" width="20" height="20" rx="4" />
-        <path d="M35 10h12v3H35zm0 6h8v3H35zm0 6h12v3H35z" />
-        <text x="50" y="22" fontFamily="Outfit" fontWeight="bold" fontSize="14">{t('tenantU')}</text>
-      </svg>
-    )},
-    { name: 'VentureScale', svg: (
-      <svg className="h-7 opacity-75 text-orange-900" viewBox="0 0 120 30" fill="currentColor">
-        <polygon points="5,25 15,5 25,25" />
-        <text x="35" y="22" fontFamily="Outfit" fontWeight="bold" fontSize="14">{t('vScale')}</text>
-      </svg>
-    )},
-    { name: 'PropFlow', svg: (
-      <svg className="h-7 opacity-75 text-orange-900" viewBox="0 0 120 30" fill="currentColor">
-        <circle cx="15" cy="15" r="10" />
-        <circle cx="20" cy="15" r="5" fill="#FFF7ED" />
-        <text x="35" y="22" fontFamily="Outfit" fontWeight="bold" fontSize="14">{t('propFlow')}</text>
-      </svg>
-    )},
-    { name: 'FairRent', svg: (
-      <svg className="h-7 opacity-75 text-orange-900" viewBox="0 0 120 30" fill="currentColor">
-        <path d="M5 25h20V12L15 5 5 12z" />
-        <text x="35" y="22" fontFamily="Outfit" fontWeight="bold" fontSize="14">{t('fairRent')}</text>
-      </svg>
-    )}
-  ];
-
   return (
     <div className="relative overflow-x-hidden min-h-screen">
       {/* Top Navigation */}
@@ -63,7 +33,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         <nav className="hidden md:flex items-center space-x-8 font-medium text-gray-600">
           <a href="#features" className="hover:text-orange-500 transition-colors">{t('features')}</a>
           <a href="#bento" className="hover:text-orange-500 transition-colors">{t('howItWorks')}</a>
-          <a href="#demo" className="hover:text-orange-500 transition-colors">{t('demoDocs')}</a>
+          {demoDocs.length > 0 && <a href="#demo" className="hover:text-orange-500 transition-colors">{t('demoDocs')}</a>}
         </nav>
 
         <div>
@@ -97,11 +67,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
             >
               {t('analyzeAgreement')}
             </ClayButton>
-            <a href="#demo">
-              <ClayButton variant="secondary" className="w-full sm:w-auto">
-                {t('tryDemo')}
-              </ClayButton>
-            </a>
           </div>
         </div>
 
@@ -168,22 +133,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
               </div>
             </div>
           </motion.div>
-        </div>
-      </section>
-
-      {/* Social Proof Logo Wall */}
-      <section className="bg-orange-50/50 border-y border-[#FFEDD5] py-8 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 text-center space-y-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-orange-800/60">
-            {t('trustedBy')}
-          </p>
-          <div className="flex flex-wrap justify-center items-center gap-12 pt-2">
-            {mockLogos.map((logo, i) => (
-              <div key={i} className="flex items-center grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
-                {logo.svg}
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -272,56 +221,58 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
         </div>
       </section>
 
-      {/* Demo Documents Section */}
-      <section id="demo" className="max-w-7xl mx-auto px-6 py-20 bg-orange-50/30 rounded-4xl border border-orange-100">
-        <div className="text-center space-y-4 mb-12">
-          <h2 className="text-3xl font-extrabold text-brand-ink">{t('selectSample')}</h2>
-          <p className="text-gray-600 max-w-xl mx-auto">
-            {t('testRagDesc')}
-          </p>
-        </div>
+      {/* Demo Documents Section (renders only if demo documents are provided by backend) */}
+      {demoDocs.length > 0 && (
+        <section id="demo" className="max-w-7xl mx-auto px-6 py-20 bg-orange-50/30 rounded-4xl border border-orange-100">
+          <div className="text-center space-y-4 mb-12">
+            <h2 className="text-3xl font-extrabold text-brand-ink">{t('selectSample')}</h2>
+            <p className="text-gray-600 max-w-xl mx-auto">
+              {t('testRagDesc')}
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {demoDocs.map((doc) => (
-            <motion.div
-              key={doc.id}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="cursor-pointer"
-              onClick={() => onStart(doc.id)}
-            >
-              <ClayCard className="h-full border-2 border-orange-100 hover:border-orange-300 flex flex-col justify-between p-6 bg-white">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-start">
-                    <span className={`text-[10px] uppercase font-extrabold px-3 py-1 rounded-full ${
-                      (doc.documentType || doc.type) === 'tos' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
-                    }`}>
-                      {doc.documentType === 'tos' ? 'Terms of Service' : 'Rental Lease'}
-                    </span>
-                    <span className="text-xs text-gray-400">{doc.uploadDate || doc.upload_date}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            {demoDocs.map((doc) => (
+              <motion.div
+                key={doc.id}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="cursor-pointer"
+                onClick={() => onStart(doc.id)}
+              >
+                <ClayCard className="h-full border-2 border-orange-100 hover:border-orange-300 flex flex-col justify-between p-6 bg-white">
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-start">
+                      <span className={`text-[10px] uppercase font-extrabold px-3 py-1 rounded-full ${
+                        (doc.documentType || doc.type) === 'tos' ? 'bg-indigo-100 text-indigo-800' : 'bg-teal-100 text-teal-800'
+                      }`}>
+                        {doc.documentType === 'tos' ? 'Terms of Service' : 'Rental Lease'}
+                      </span>
+                      <span className="text-xs text-gray-400">{doc.uploadDate || doc.upload_date}</span>
+                    </div>
+
+                    <h3 className="text-xl font-bold text-gray-800">{doc.title || doc.filename}</h3>
+                    <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">{doc.summary}</p>
                   </div>
 
-                  <h3 className="text-xl font-bold text-gray-800">{doc.title || doc.filename}</h3>
-                  <p className="text-sm text-gray-500 leading-relaxed line-clamp-3">{doc.summary}</p>
-                </div>
-
-                <div className="pt-6 border-t border-orange-50 flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-gray-600">{t('healthLabel')}</span>
-                    <span className={`text-sm font-extrabold ${
-                      (doc.healthScore || doc.health_score) > 60 ? 'text-green-600' : 'text-red-500'
-                    }`}>{(doc.healthScore || doc.health_score)}/100</span>
+                  <div className="pt-6 border-t border-orange-50 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-bold text-gray-600">{t('healthLabel')}</span>
+                      <span className={`text-sm font-extrabold ${
+                        (doc.healthScore || doc.health_score) > 60 ? 'text-green-600' : 'text-red-500'
+                      }`}>{(doc.healthScore || doc.health_score)}/100</span>
+                    </div>
+                    <div className="text-orange-600 font-bold text-sm flex items-center space-x-1 hover:text-orange-700">
+                      <span>{t('tryAnalyzer')}</span>
+                      <ArrowRight size={14} />
+                    </div>
                   </div>
-                  <div className="text-orange-600 font-bold text-sm flex items-center space-x-1 hover:text-orange-700">
-                    <span>{t('tryAnalyzer')}</span>
-                    <ArrowRight size={14} />
-                  </div>
-                </div>
-              </ClayCard>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+                </ClayCard>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Footer CTA */}
       <section className="max-w-7xl mx-auto px-6 py-28 text-center space-y-6">

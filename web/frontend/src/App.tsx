@@ -124,7 +124,7 @@ function App() {
         />
       ) : (
         <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="text-center"><Sparkles className="w-12 h-12 text-orange-500 animate-pulse mx-auto mb-4" /><h2 className="text-xl font-bold text-gray-800">Loading...</h2></div></div>}>
-          <ReportsView />
+          <ReportsView onBackToHome={handleBackToHome} />
         </Suspense>
       )}
     </div>

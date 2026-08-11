@@ -1,4 +1,4 @@
-MOCK_DEMOS = [
+PRELOADED_DEMOS = [
   {
     "id": "acme-tos",
     "status": "done",

@@ -77,7 +77,7 @@ export const translations = {
     clear: "Clear",
     shareLink: "Share Link",
     shareLinkToast: "Share link copied to clipboard!",
-
+    
     // Extension Reports translations
     privacyPolicy: "Privacy Policy",
     termsConditions: "Terms & Conditions",
@@ -106,7 +106,26 @@ export const translations = {
     checkExtensionDemoNav: "Check Extension Demo",
     loadingExtensionReport: "Loading Report...",
     fetchingClauses: "Fetching analyzed clauses.",
-    errorLoadingExtensionReport: "Error Loading Report"
+    errorLoadingExtensionReport: "Error Loading Report",
+
+    // Additional Workspace Redesign UI keys
+    uploadTabFile: "Upload File",
+    uploadTabText: "Paste Raw Text",
+    uploadTabUrl: "Web URL",
+    searchClausesPlaceholder: "Search clauses by title or text...",
+    viewModeCompare: "Side-by-Side",
+    viewModeOriginal: "Original Legalese",
+    viewModeSimplified: "Plain English & RAG",
+    sampleContractLoaded: "Sample document loaded successfully",
+    riskCategoryFilter: "Filter Category",
+    allCategories: "All Categories",
+    executiveSummaryTitle: "Executive AI Risk Assessment",
+    clauseNavigationHint: "Tip: Use ↑ / ↓ arrow keys to switch clauses",
+    analyzingStage: "AI Pipeline Analyzing",
+    cancelAnalysis: "Cancel Analysis",
+    copyOriginalText: "Copy Original Legalese",
+    copySimplifiedText: "Copy Plain English",
+    copiedTextSuccess: "Copied to clipboard!"
   }
 };
 
