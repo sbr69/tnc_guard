@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ExtensionPopupData } from '../../lib/types';
+import type { ExtensionPopupData } from '../../lib/types';
 import { Shield, ShieldAlert, ShieldCheck, FileText, CheckCircle2, XCircle, Search, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
 import { browser } from 'wxt/browser';
 import { t } from '../../lib/i18n';
@@ -52,6 +52,7 @@ export default function App() {
         setError(null);
       } else if (message.type === 'REPORT_LOADING') {
         setLoadingMsg(message.payload.stage || 'Analyzing...');
+        setData(prev => prev ? { ...prev, status: 'processing' } : null);
         setError(null);
       } else if (message.type === 'REPORT_ERROR') {
         setError(message.payload.error || 'Failed to analyze this site.');
@@ -89,7 +90,12 @@ export default function App() {
         <ShieldAlert className="w-12 h-12 text-brand-primary mb-3" />
         <h2 className="text-lg font-bold mb-2">{t('ClarifyLaw')}</h2>
         <p className="text-sm text-gray-600 mb-4">{error}</p>
-        <button onClick={() => window.close()} className="clay-btn clay-btn-primary px-6 py-2">{t('Close')}</button>
+        <div className="flex gap-2">
+          <button onClick={handleRescan} className="clay-btn clay-btn-primary px-4 py-2 flex items-center gap-2">
+            <RefreshCw className="w-4 h-4" /> {t('Re-scan')}
+          </button>
+          <button onClick={() => window.close()} className="clay-btn clay-btn-secondary px-4 py-2">{t('Close')}</button>
+        </div>
       </div>
     );
   }

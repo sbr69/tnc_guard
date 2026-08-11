@@ -72,6 +72,14 @@ export default defineContentScript({
           matchPolicyLink(node);
         }
       });
+      
+      // Also check if the current page itself is a policy
+      for (const key of Object.keys(POLICY_URL_PATTERNS)) {
+        const type = key as PolicyType;
+        if (!discoveredPolicies[type] && POLICY_URL_PATTERNS[type].test(window.location.href)) {
+          discoveredPolicies[type] = window.location.href;
+        }
+      }
     }
 
     let allFound = false;
@@ -106,6 +114,14 @@ export default defineContentScript({
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           if (node instanceof HTMLElement) {
+            if (node instanceof HTMLAnchorElement && node.hasAttribute('href')) {
+              const oldState = { ...discoveredPolicies };
+              matchPolicyLink(node);
+              if (JSON.stringify(oldState) !== JSON.stringify(discoveredPolicies)) {
+                foundNew = true;
+              }
+            }
+            
             const newLinks = node.querySelectorAll('a[href]');
             newLinks.forEach((linkNode) => {
               if (linkNode instanceof HTMLAnchorElement) {

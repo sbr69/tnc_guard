@@ -34,12 +34,21 @@ export default defineBackground(() => {
         }
       };
       
-      // Store manually discovered policy
-      await browser.storage.local.set(Object.fromEntries([[`discovered_${domain}`, payload.policies]]));
+      // Fetch existing discovered policies and merge
+      const existing = await getDiscoveredPolicies(domain);
+      const merged = { ...existing };
+      
+      if (type === 'privacy') merged.privacy = info.linkUrl;
+      else if (type === 'tos') merged.tos = info.linkUrl;
+      else if (type === 'cookie') merged.cookie = info.linkUrl;
+      else if (type === 'eula') merged.eula = info.linkUrl;
+      
+      // Store merged discovered policies
+      await browser.storage.local.set(Object.fromEntries([[`discovered_${domain}`, merged]]));
       
       // Force popup open (not always possible from background without user interaction, but we can set state)
       // We will trigger analysis immediately
-      triggerAnalysis(payload.domain, payload.policies);
+      triggerAnalysis(domain, merged, true);
     }
   });
 
