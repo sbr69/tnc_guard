@@ -17,11 +17,23 @@ export default defineConfig({
   manifest: {
     permissions: ['storage', 'contextMenus', 'activeTab'],
     host_permissions: ['<all_urls>'],
-    name: 'ClarifyLaw',
+    name: 'Unmask-Terms',
     description: 'Simplify legal agreements and identify risks instantly.',
     version: '1.0.0',
+    icons: {
+      "16": "/icon/TnC_favicon.png",
+      "32": "/icon/TnC_favicon.png",
+      "48": "/icon/TnC_favicon.png",
+      "128": "/icon/TnC_favicon.png"
+    },
     action: {
-      default_title: 'ClarifyLaw',
+      default_title: 'Unmask-Terms',
+      default_icon: {
+        "16": "/icon/TnC_favicon.png",
+        "32": "/icon/TnC_favicon.png",
+        "48": "/icon/TnC_favicon.png",
+        "128": "/icon/TnC_favicon.png"
+      }
     },
   },
 });

@@ -1,7 +1,7 @@
 [project]
-name = "clarifylaw-backend"
+name = "unmask-terms-backend"
 version = "0.1.0"
-description = "FastAPI backend for ClarifyLaw Legal Document Risk Analyzer"
+description = "FastAPI backend for Unmask-Terms Legal Document Risk Analyzer"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

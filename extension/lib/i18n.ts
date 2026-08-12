@@ -6,7 +6,7 @@ i18n.use(initReactI18next).init({
   resources: {
     en: {
       translation: {
-        "ClarifyLaw": "ClarifyLaw",
+        "Unmask-Terms": "Unmask-Terms",
         "Close": "Close",
         "Analyse": "Analyse",
         "Analysing": "Analysing",
@@ -17,6 +17,7 @@ i18n.use(initReactI18next).init({
         "No significant risks detected.": "No significant risks detected.",
         "This site's policies appear fair and standard.": "This site's policies appear fair and standard.",
         "Scanned": "Scanned",
+        "Scanned {{days}} days ago — results may be outdated.": "Scanned {{days}} days ago — results may be outdated.",
         "Re-scan": "Re-scan",
         "Not found": "Not found"
       }

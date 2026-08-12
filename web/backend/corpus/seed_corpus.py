@@ -245,7 +245,7 @@ def run_test_query(query_text, limit=3):
             conn.close()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Seed or Query ClarifyLaw Reference Corpus")
+    parser = argparse.ArgumentParser(description="Seed or Query Unmask-Terms Reference Corpus")
     parser.add_argument("--csv", type=str, default="backend/corpus/reference_clauses.csv", help="Path to reference clauses CSV")
     parser.add_argument("--test-query", type=str, help="Run a test vector similarity query against the database")
     parser.add_argument("--batch-size", type=int, default=10, help="Batch size for embedding calls")

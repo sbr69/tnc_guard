@@ -29,14 +29,14 @@ async function withDomainLock<T>(domain: string, fn: () => Promise<T>): Promise<
 }
 
 export default defineBackground(() => {
-  console.log('ClarifyLaw Background Worker loaded.');
+  console.log('Unmask-Terms Background Worker loaded.');
 
   // Context menu created once on install (idempotent against SW restarts) (#12).
   browser.runtime.onInstalled.addListener(() => {
     try {
       browser.contextMenus.create({
-        id: 'clarifylaw-analyze-link',
-        title: 'Analyse this policy with ClarifyLaw',
+        id: 'unmask-terms-analyze-link',
+        title: 'Analyse this policy with Unmask-Terms',
         contexts: ['link'],
       });
     } catch {
@@ -45,7 +45,7 @@ export default defineBackground(() => {
   });
 
   browser.contextMenus.onClicked.addListener(async (info, tab) => {
-    if (info.menuItemId !== 'clarifylaw-analyze-link' || !info.linkUrl) return;
+    if (info.menuItemId !== 'unmask-terms-analyze-link' || !info.linkUrl) return;
     if (!tab?.url) return;
     const domain = new URL(tab.url).hostname;
 

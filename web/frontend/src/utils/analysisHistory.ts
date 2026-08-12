@@ -8,7 +8,7 @@ export interface HistoryEntry {
   result: DocumentAnalysisResult;
 }
 
-const DB_NAME = 'clarifylaw_db';
+const DB_NAME = 'unmask_terms_db';
 const STORE_NAME = 'analysis_history';
 const DB_VERSION = 1;
 const MAX_ENTRIES = 5;
@@ -58,7 +58,7 @@ export async function saveAnalysisToHistory(result: DocumentAnalysisResult): Pro
       tx.onabort = () => { db.close(); reject(tx.error); };
     });
   } catch (err) {
-    console.warn('[ClarifyLaw] Failed to save analysis to history:', err);
+    console.warn('[Unmask-Terms] Failed to save analysis to history:', err);
   }
 }
 
@@ -79,7 +79,7 @@ export async function getAnalysisHistory(): Promise<HistoryEntry[]> {
       tx.onabort = () => { db.close(); reject(tx.error); };
     });
   } catch (err) {
-    console.warn('[ClarifyLaw] Failed to load analysis history:', err);
+    console.warn('[Unmask-Terms] Failed to load analysis history:', err);
     return [];
   }
 }
@@ -95,6 +95,6 @@ export async function deleteHistoryEntry(historyId: string): Promise<void> {
       tx.onabort = () => { db.close(); reject(tx.error); };
     });
   } catch (err) {
-    console.warn('[ClarifyLaw] Failed to delete history entry:', err);
+    console.warn('[Unmask-Terms] Failed to delete history entry:', err);
   }
 }

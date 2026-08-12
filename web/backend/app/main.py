@@ -5,7 +5,7 @@ from .config import settings
 from .routers import documents, health, site
 
 app = FastAPI(
-    title="ClarifyLaw API",
+    title="Unmask-Terms API",
     description="RAG-powered legal agreement clause simplifier and risk flagger",
     version="1.0.0",
 )
@@ -29,6 +29,6 @@ app.include_router(site.router)
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to the ClarifyLaw API. Visit /docs or /redoc for API reference documentation.",
+        "message": "Welcome to the Unmask-Terms API. Visit /docs or /redoc for API reference documentation.",
         "version": "1.0.0"
     }

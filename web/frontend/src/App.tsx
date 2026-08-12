@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { LandingPage } from './components/LandingPage';
 import { AnalyzerWorkspace } from './components/AnalyzerWorkspace';
-import { ShieldCheck, FileText, Sparkles, Home } from 'lucide-react';
+import { FileText, Sparkles, Home } from 'lucide-react';
 import { ClayButton } from './components/ClayButton';
 import { t } from './i18n';
 
@@ -56,9 +56,7 @@ function App() {
       {/* Global Top Switcher Bar */}
       <header className="bg-white/80 backdrop-blur-md border-b border-orange-100 sticky top-0 z-40 px-3 sm:px-6 py-2.5 sm:py-0 min-h-14 sm:h-16 flex items-center justify-between gap-2">
         <div className="flex items-center space-x-2 shrink-0 cursor-pointer" onClick={handleBackToHome}>
-          <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center text-white clay-inner-ring shrink-0">
-            <ShieldCheck size={18} />
-          </div>
+          <img src="/TnC_favicon.png" alt="Logo" className="w-8 h-8 object-contain shrink-0" />
           <span className="font-extrabold text-base sm:text-lg text-brand-ink">
             {t('clarify')}<span className="text-orange-500">{t('law')}</span>
           </span>

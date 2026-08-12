@@ -193,7 +193,7 @@ export default function App() {
     return (
       <div className="w-87.5 p-5 bg-brand-bg text-brand-ink font-sans flex flex-col items-center text-center">
         <ShieldAlert className="w-12 h-12 text-brand-primary mb-3" />
-        <h2 className="text-lg font-bold mb-2">{t('ClarifyLaw')}</h2>
+        <h2 className="text-lg font-bold mb-2">{t('Unmask-Terms')}</h2>
         <p className="text-sm text-gray-600 mb-4">{error}</p>
         <div className="flex gap-2">
           <button onClick={() => handleAnalyze()} className="clay-btn clay-btn-primary px-4 py-2 flex items-center gap-2">
@@ -209,8 +209,8 @@ export default function App() {
   if (idle && !data) {
     return (
       <div className="w-87.5 p-5 bg-brand-bg text-brand-ink font-sans flex flex-col items-center text-center min-h-75 justify-center">
-        <Shield className="w-12 h-12 text-brand-primary mb-3" />
-        <h2 className="text-lg font-bold mb-1">{t('ClarifyLaw')}</h2>
+        <img src="/icon/TnC_favicon.png" className="w-12 h-12 object-contain mb-3" alt="Logo" />
+        <h2 className="text-lg font-bold mb-1">{t('Unmask-Terms')}</h2>
         <p className="text-sm text-gray-600 mb-4">
           {domain ? `${t('Analyse')} ${domain}` : t('Analyse')}
         </p>
@@ -252,8 +252,8 @@ export default function App() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-brand-border">
         <div className="flex items-center gap-2">
-          <Shield className="w-5 h-5 text-brand-primary" />
-          <span className="font-bold text-sm">{t('ClarifyLaw')}</span>
+          <img src="/icon/TnC_favicon.png" className="w-5 h-5 object-contain" alt="Logo" />
+          <span className="font-bold text-sm">{t('Unmask-Terms')}</span>
         </div>
         <button onClick={handleRescan} className="text-gray-400 hover:text-brand-primary transition-colors" title={t('Re-scan')}>
           <RefreshCw className="w-4 h-4" />
@@ -264,7 +264,7 @@ export default function App() {
       {isStale && (
         <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-100 text-yellow-700 text-xs flex items-center gap-2">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-          <span>Scanned {staleDays} days ago — results may be outdated.</span>
+          <span>{t('Scanned {{days}} days ago — results may be outdated.', { days: staleDays })}</span>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-name = "clarifylaw-worker"
+name = "unmask-terms-worker"
 main = "src/index.ts"
 compatibility_date = "2024-04-05"
 
@@ -6,6 +6,6 @@ compatibility_date = "2024-04-05"
 BACKEND_API_URL = "http://127.0.0.1:8001" # Default for local dev
 
 [[kv_namespaces]]
-binding = "CLARIFYLAW_CACHE"
+binding = "UNMASK_TERMS_CACHE"
 id = "preview_id_replace_me_in_prod"
 preview_id = "preview_id"

@@ -169,7 +169,7 @@ export const SiteReportView: React.FC<SiteReportViewProps> = ({ site, onReset })
             </div>
 
             <p className="text-xs md:text-sm text-gray-700 leading-relaxed bg-orange-50/40 p-3.5 rounded-2xl border border-orange-100">
-              {t('scanned4Policies')} ClarifyLaw isolated provisions across active policies and mapped them against standard consumer protection baselines.
+              {t('scanned4Policies')} Unmask-Terms isolated provisions across active policies and mapped them against standard consumer protection baselines.
             </p>
 
             <div className="grid grid-cols-2 gap-3 pt-1">

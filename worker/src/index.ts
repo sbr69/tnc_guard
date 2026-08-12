@@ -71,7 +71,7 @@ export default {
         const cacheKey = `site:${hostname}`;
 
         if (!forceRefresh) {
-          const cachedStr = await env.CLARIFYLAW_CACHE.get(cacheKey);
+          const cachedStr = await env.UNMASK_TERMS_CACHE.get(cacheKey);
           if (cachedStr) {
             return new Response(cachedStr, {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -92,7 +92,7 @@ export default {
         if (backendRes.status === 200) {
           // Completed analysis -> cache for 30d.
           ctx.waitUntil(
-            env.CLARIFYLAW_CACHE.put(cacheKey, backendText, {
+            env.UNMASK_TERMS_CACHE.put(cacheKey, backendText, {
               expirationTtl: 30 * 24 * 60 * 60,
             })
           );
@@ -118,7 +118,7 @@ export default {
       const forceRefresh = url.searchParams.get('forceRefresh') === 'true';
 
       if (!forceRefresh) {
-        const cachedStr = await env.CLARIFYLAW_CACHE.get(cacheKey);
+        const cachedStr = await env.UNMASK_TERMS_CACHE.get(cacheKey);
         if (cachedStr) {
           return new Response(cachedStr, {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -134,7 +134,7 @@ export default {
       const backendText = await backendRes.text();
       if (backendRes.status === 200) {
         ctx.waitUntil(
-          env.CLARIFYLAW_CACHE.put(cacheKey, backendText, {
+          env.UNMASK_TERMS_CACHE.put(cacheKey, backendText, {
             expirationTtl: 30 * 24 * 60 * 60,
           })
         );

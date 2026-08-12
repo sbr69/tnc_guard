@@ -2,6 +2,6 @@
 // by running `wrangler types`
 
 interface Env {
-	CLARIFYLAW_CACHE: KVNamespace;
+	UNMASK_TERMS_CACHE: KVNamespace;
 	BACKEND_API_URL: "http://127.0.0.1:8001";
 }

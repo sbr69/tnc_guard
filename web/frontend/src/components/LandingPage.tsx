@@ -22,10 +22,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
       {/* Top Navigation */}
       <header className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between border-b border-[#FFEDD5]">
         <div className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer" onClick={() => onStart('acme-tos')}>
-          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-orange-500 flex items-center justify-center text-white clay-inner-ring shadow-[0_4px_12px_rgba(249,115,22,0.3)] shrink-0">
-            <ShieldCheck size={20} className="sm:hidden" />
-            <ShieldCheck size={24} className="hidden sm:block" />
-          </div>
+          <img src="/TnC_favicon.png" alt="Logo" className="w-8 h-8 sm:w-10 sm:h-10 object-contain shrink-0" />
           <span className="text-xl sm:text-2xl font-bold tracking-tight text-brand-ink">
             {t('clarify')}<span className="text-orange-500">{t('law')}</span>
           </span>

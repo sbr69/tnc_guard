@@ -916,7 +916,7 @@ export const AnalyzerWorkspace: React.FC<AnalyzerWorkspaceProps> = ({
                   {currentDoc.summary || (
                     (currentDoc.healthScore ?? 0) > 60 
                       ? 'This agreement contains mostly balanced provisions, but several specific terms require careful review prior to signing.' 
-                      : 'Warning: ClarifyLaw identified severe gotchas including unilateral modification rights and asymmetric liability terms.'
+                      : 'Warning: Unmask-Terms identified severe gotchas including unilateral modification rights and asymmetric liability terms.'
                   )}
                 </p>
 
