@@ -3,6 +3,7 @@ import { LandingPage } from './components/LandingPage';
 import { AnalyzerWorkspace } from './components/AnalyzerWorkspace';
 import { FileText, Sparkles, Home } from 'lucide-react';
 import { ClayButton } from './components/ClayButton';
+import { ClayCursor } from './components/ClayCursor';
 import { t } from './i18n';
 
 const ReportsView = lazy(() => import('./components/ReportsView').then(m => ({ default: m.ReportsView })));
@@ -125,6 +126,9 @@ function App() {
           <ReportsView onBackToHome={handleBackToHome} />
         </Suspense>
       )}
+
+      {/* Claymorphism Dynamic Custom Cursor */}
+      <ClayCursor />
     </div>
   );
 }
