@@ -23,13 +23,13 @@ _DONE_TTL = 30 * 60  # keep completed/error jobs queryable for 30 min
 _POST_WAIT_SECONDS = 3.0  # how long POST waits for a fast completion before 202
 
 
-async def _run_job(hostname: str, site_url: str, provided, job: dict) -> None:
+async def _run_job(hostname: str, site_url: str, provided, policy_texts, job: dict) -> None:
     try:
         policy_urls = await asyncio.to_thread(discover_policy_urls, hostname, site_url, provided)
         if not any(policy_urls.values()):
             report = build_site_report(hostname, {})
         else:
-            report = await analyze_policies(hostname, policy_urls)
+            report = await analyze_policies(hostname, policy_urls, policy_texts)
         job["report"] = report
         job["status"] = "done"
     except Exception as e:
@@ -39,7 +39,7 @@ async def _run_job(hostname: str, site_url: str, provided, job: dict) -> None:
         job["finished"] = time.time()
 
 
-async def start_or_get_job(hostname: str, site_url: str, provided, force_refresh: bool = False) -> dict:
+async def start_or_get_job(hostname: str, site_url: str, provided, policy_texts=None, force_refresh: bool = False) -> dict:
     """Return the job for ``hostname``, starting a new one if needed.
 
     With ``force_refresh`` the existing job (even if done) is replaced so a
@@ -65,7 +65,7 @@ async def start_or_get_job(hostname: str, site_url: str, provided, force_refresh
             "task": None,
         }
         _jobs[hostname] = job
-        job["task"] = asyncio.create_task(_run_job(hostname, site_url, provided, job))
+        job["task"] = asyncio.create_task(_run_job(hostname, site_url, provided, policy_texts, job))
         start_new = True
     return job
 

@@ -26,13 +26,56 @@ def split_by_regex(text: str) -> list[tuple[str, str]]:
     return clauses
 
 
+_HEADER_LINE_RE = re.compile(
+    r"^(?:"
+    r"(?:\d+[\.\)]\s*)"               # "1." "1)"
+    r"|(?:\d+\.\d+(?:\.\d+)*\s*)"     # "1.1" "1.1.1"
+    r"|(?:Section|Article|§)\s+\d+"   # "Section 1"
+    r"|[A-Z][A-Z \t&]{3,40}"          # ALL-CAPS header
+    r"|[IVXLCDM]+\."                  # roman numeral
+    r")"
+, re.I)
+
+
+def _reconstruct_paragraphs(text: str) -> list[str]:
+    """Merge line-wrapped text into real paragraphs.
+
+    HTML/PDF extraction often yields one visual line per ``\\n``. Treating each
+    line as its own clause produces hundreds of fragments. A new paragraph
+    starts at a header-like line or a blank line; other lines are continuations
+    of the current paragraph. A hard size cap prevents unbounded merging on
+    dense, header-less text.
+    """
+    paragraphs: list[str] = []
+    current: list[str] = []
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not line:
+            if current:
+                paragraphs.append(" ".join(current))
+                current = []
+            continue
+        is_header = bool(_HEADER_LINE_RE.match(line)) and len(line) < 80
+        joined = " ".join(current) if current else ""
+        if current and (is_header or len(joined) >= 800):
+            paragraphs.append(joined)
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        paragraphs.append(" ".join(current))
+    return [p for p in paragraphs if p]
+
+
 def split_by_paragraphs_and_sentences(text: str) -> list[tuple[str, str]]:
     """Deterministic fallback: splits unstructured documents cleanly on double newlines and logical paragraph boundaries."""
     # PDF parsing often gives single \n instead of \n\n. If there are almost no \n\n, try to split by \n.
     if text.count("\n\n") < 2 and text.count("\n") > 5:
         # replace single newlines that don't look like paragraph ends with spaces
         text = re.sub(r'(?<![.!?])\n(?=[a-z])', ' ', text)
-        paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+        # Reconstruct real paragraphs so each clause is a paragraph, not a
+        # single line fragment (cuts clause count sharply on line-wrapped text).
+        paragraphs = _reconstruct_paragraphs(text)
     else:
         paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
 

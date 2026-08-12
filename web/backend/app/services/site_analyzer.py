@@ -11,6 +11,7 @@ import uuid
 from ..models.clause import RiskLevel
 from ..models.extension import ExtensionSiteReport, PolicySummary, RiskFlag
 from ..pipeline import run_analysis_pipeline
+from .url_cache import set as cache_set
 
 POLICY_WEIGHTS = {"privacy": 3.0, "tos": 2.5, "cookie": 1.5, "eula": 1.0}
 
@@ -88,8 +89,22 @@ def build_site_report(domain: str, results: dict[str, object]) -> ExtensionSiteR
     )
 
 
-async def analyze_policies(domain: str, policy_urls: dict[str, str | None]) -> ExtensionSiteReport:
-    """Run the pipeline for every provided policy URL in parallel and build the report."""
+async def analyze_policies(
+    domain: str,
+    policy_urls: dict[str, str | None],
+    policy_texts: dict[str, str | None] | None = None,
+) -> ExtensionSiteReport:
+    """Run the pipeline for every provided policy URL in parallel and build the report.
+
+    ``policy_texts`` (e.g. extension-extracted DOM text for client-rendered
+    SPAs) is pre-seeded into the URL cache so ``parse_url`` reuses it instead
+    of fetching static HTML that would be empty for a SPA.
+    """
+    if policy_texts:
+        for pt, text in policy_texts.items():
+            url = policy_urls.get(pt)
+            if url and text:
+                cache_set(url, text)
     tasks = {pt: analyze_single_policy(domain, pt, url) for pt, url in policy_urls.items() if url}
     results: dict[str, object] = {}
     if tasks:

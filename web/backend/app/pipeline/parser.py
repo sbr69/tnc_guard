@@ -1,9 +1,19 @@
 import io
 import pdfplumber
 import docx
-import requests
-from bs4 import BeautifulSoup
 from ..models.base import CamelModel
+from ..services.html_text import extract_page_text
+from ..services.http_client import safe_get
+
+_PARSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Upgrade-Insecure-Requests": "1",
+}
 
 class PageContent(CamelModel):
     page_number: int
@@ -141,31 +151,13 @@ def parse_url(url: str) -> ParsedDocument:
     if cached_text:
         return parse_txt(cached_text)
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Upgrade-Insecure-Requests": "1"
-    }
-    response = requests.get(url, headers=headers, timeout=15)
+    response = safe_get(url, _PARSE_HEADERS, 15)
+    if response is None:
+        raise Exception("Failed to fetch URL (blocked or unreachable).")
     response.raise_for_status()
-    
-    soup = BeautifulSoup(response.content, "html.parser")
-    
-    # Remove script and style elements
-    for script_or_style in soup(["script", "style", "nav", "footer", "header", "aside"]):
-        script_or_style.extract()
-        
-    text = soup.get_text(separator="\n")
-    
-    # Clean up whitespace
-    lines = (line.strip() for line in text.splitlines())
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    text = "\n".join(chunk for chunk in chunks if chunk)
-    
+    # Shared extraction with discovery so cached and freshly-fetched text are
+    # byte-identical (cache short-circuit above is provably lossless).
+    text = extract_page_text(response.text)
     return parse_txt(text)
 
 def parse_document(file_bytes: bytes | None, filename: str | None, raw_text: str | None = None, url: str | None = None) -> ParsedDocument:

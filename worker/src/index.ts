@@ -45,7 +45,7 @@ export default {
 
       try {
         const body: AnalyzeRequest = await request.json();
-        const { domain, policyUrls, forceRefresh } = body;
+        const { domain, policyUrls, policyTexts, forceRefresh } = body;
 
         if (!domain) {
           return new Response('Missing domain', { status: 400, headers: corsHeaders });
@@ -70,7 +70,7 @@ export default {
         }
 
         const analysisPromise = Promise.race([
-          runAnalysis(domain, policyUrls, env),
+          runAnalysis(domain, policyUrls, policyTexts, env),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Analysis timeout')), 300_000)
           )
@@ -97,7 +97,7 @@ export default {
         });
       }
     }
-    
+
     if (url.pathname === '/api/analyze' && request.method === 'GET') {
       const domain = url.searchParams.get('domain');
       if (!domain) {
@@ -124,7 +124,7 @@ export default {
 
       try {
         const body: SiteAnalyzeRequest = await request.json();
-        const { siteUrl, policyUrls, forceRefresh } = body;
+        const { siteUrl, policyUrls, policyTexts, forceRefresh } = body;
 
         if (!siteUrl) {
           return new Response(JSON.stringify({ error: 'Missing siteUrl' }), {
@@ -160,7 +160,7 @@ export default {
         const backendRes = await fetch(`${backendUrl}/api/site/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ siteUrl, policy_urls: policyUrls ?? {} }),
+          body: JSON.stringify({ siteUrl, policy_urls: policyUrls ?? {}, policy_texts: policyTexts ?? {} }),
         });
 
         const backendText = await backendRes.text();
@@ -224,13 +224,13 @@ export default {
   },
 };
 
-async function runAnalysis(domain: string, policyUrls: AnalyzeRequest['policyUrls'], env: Env): Promise<ExtensionSiteReport> {
-  const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001'; 
-  
+async function runAnalysis(domain: string, policyUrls: AnalyzeRequest['policyUrls'], policyTexts: AnalyzeRequest['policyTexts'], env: Env): Promise<ExtensionSiteReport> {
+  const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001';
+
   const res = await fetch(`${backendUrl}/api/extension/analyze`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ domain, policy_urls: policyUrls }),
+    body: JSON.stringify({ domain, policy_urls: policyUrls, policy_texts: policyTexts ?? {} }),
   });
 
   if (!res.ok) {

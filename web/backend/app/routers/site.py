@@ -12,6 +12,7 @@ router = APIRouter(prefix="/api/site", tags=["Site"])
 class SiteAnalyzeRequest(CamelModel):
     site_url: str
     policy_urls: dict[str, str | None] = {}
+    policy_texts: dict[str, str | None] = {}
     force_refresh: bool = False
 
 
@@ -40,7 +41,7 @@ async def analyze_site_url(req: SiteAnalyzeRequest):
     if not hostname:
         raise HTTPException(status_code=400, detail="Could not determine hostname from siteUrl.")
 
-    job = await start_or_get_job(hostname, site_url, req.policy_urls, req.force_refresh)
+    job = await start_or_get_job(hostname, site_url, req.policy_urls, req.policy_texts, req.force_refresh)
 
     # Already done (cached in-process).
     if job["status"] == "done" and job["report"] is not None:

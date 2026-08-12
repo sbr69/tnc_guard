@@ -19,10 +19,11 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 
-import requests
 import tldextract
 from bs4 import BeautifulSoup
 
+from .html_text import extract_page_text
+from .http_client import safe_get
 from .url_cache import get as cache_get, set as cache_set
 
 POLICY_TYPES = ("privacy", "tos", "cookie", "eula")
@@ -60,7 +61,11 @@ VALIDATION_KEYWORDS = {
     "eula": ["licen", "end user", "end-user", "software", "agreement"],
 }
 
-MIN_POLICY_TEXT_LENGTH = 500
+# Per-type floor so a legitimately short cookie notice still validates after
+# nav/header/footer/aside are stripped (chrome removal can drop a small notice
+# below a single global threshold).
+MIN_POLICY_TEXT_LENGTH = {"privacy": 500, "tos": 500, "eula": 400, "cookie": 200}
+
 REQUEST_TIMEOUT = 12
 
 # Sitemap fallback bounds.
@@ -130,33 +135,25 @@ def _is_same_entity(url: str, hostname: str) -> bool:
 
 
 def _fetch(url: str) -> str | None:
-    """GET a URL and return its HTML text, or None on failure."""
-    try:
-        resp = requests.get(url, headers=_HEADERS, timeout=REQUEST_TIMEOUT, allow_redirects=True)
-        if resp.status_code >= 400 or not resp.text:
-            return None
-        return resp.text
-    except Exception:
+    """GET a URL and return its HTML text, or None on failure.
+
+    Routes through ``http_client.safe_get`` so every hop (including redirects)
+    is SSRF-checked against private/loopback ranges before connecting -- load
+    bearing now that cross-domain follows fetch URLs the analyzed site links to.
+    """
+    resp = safe_get(url, _HEADERS, REQUEST_TIMEOUT)
+    if resp is None or resp.status_code >= 400 or not resp.text:
         return None
+    return resp.text
 
 
 def _extract_text(html: str) -> str:
-    """Clean page text for the RAG pipeline. Must mirror parser.parse_url's
-    extraction so cached discovery text is identical to a fresh parse: strip
-    site chrome (nav/header/footer/aside) and preserve newlines so the
-    segmenter can split on paragraph boundaries instead of receiving one
-    giant flattened string that explodes into hundreds of junk clauses."""
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "noscript", "nav", "header", "footer", "aside"]):
-        tag.extract()
-    text = soup.get_text(separator="\n")
-    lines = (line.strip() for line in text.splitlines())
-    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-    return "\n".join(chunk for chunk in chunks if chunk)
+    """Clean page text for the RAG pipeline (shared with parser.parse_url)."""
+    return extract_page_text(html)
 
 
 def _looks_like_policy(text: str, ptype: str) -> bool:
-    if not text or len(text) < MIN_POLICY_TEXT_LENGTH:
+    if not text or len(text) < MIN_POLICY_TEXT_LENGTH[ptype]:
         return False
     lower = text.lower()
     return any(kw in lower for kw in VALIDATION_KEYWORDS[ptype])
