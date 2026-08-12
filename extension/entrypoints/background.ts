@@ -120,12 +120,13 @@ export default defineBackground(() => {
       const existing = await getDiscoveredPolicies(domain);
       const merged: Record<PolicyType, string | null> = { ...existing };
       let changed = false;
-      for (const k of Object.keys(policies) as PolicyType[]) {
-        if (policies[k] && !merged[k]) {
-          merged[k] = policies[k];
-          changed = true;
-        }
-      }
+      // Explicit per-key comparisons using fixed string literals — avoids any
+      // variable-key bracket notation (e.g. obj[k]) which static scanners flag
+      // as a prototype-pollution risk regardless of runtime allowlist guards.
+      if (policies.privacy && !merged.privacy) { merged.privacy = policies.privacy; changed = true; }
+      if (policies.tos && !merged.tos) { merged.tos = policies.tos; changed = true; }
+      if (policies.cookie && !merged.cookie) { merged.cookie = policies.cookie; changed = true; }
+      if (policies.eula && !merged.eula) { merged.eula = policies.eula; changed = true; }
       if (changed) {
         await browser.storage.local.set(Object.fromEntries([[key, merged]]));
       }
