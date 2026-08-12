@@ -24,13 +24,6 @@ export interface ExtensionSiteReport {
   topRiskFlags: RiskFlag[];
 }
 
-export interface AnalyzeRequest {
-  domain: string;
-  policyUrls: Record<PolicyType, string | null>;
-  policyTexts?: Partial<Record<PolicyType, string>>;
-  forceRefresh?: boolean;
-}
-
 export interface SiteAnalyzeRequest {
   siteUrl: string;
   policyUrls?: Partial<Record<PolicyType, string | null>>;

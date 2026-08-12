@@ -20,5 +20,8 @@ export default defineConfig({
     name: 'ClarifyLaw',
     description: 'Simplify legal agreements and identify risks instantly.',
     version: '1.0.0',
+    action: {
+      default_title: 'ClarifyLaw',
+    },
   },
 });

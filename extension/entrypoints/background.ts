@@ -1,111 +1,137 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import type { ExtensionPopupData, PolicyType, ExtensionSiteReport } from '../lib/types';
+import { classifyByUrl } from '../lib/policyPatterns';
+
+// Build-time config with dev fallbacks (#22): avoid hardcoding localhost in
+// shipped bundles.
+const WORKER_URL =
+  ((import.meta.env.VITE_WORKER_URL as string | undefined) ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
+const WEB_APP_URL =
+  ((import.meta.env.VITE_APP_URL as string | undefined) ?? 'http://localhost:5173').replace(/\/$/, '');
+
+// Per-domain write lock so the POLICIES_DETECTED read-modify-write on
+// storage.local is serialized within the service worker (#10). In-memory is
+// sufficient: an MV3 SW restart also kills in-flight messages, so there is no
+// cross-restart race to guard.
+const domainLocks = new Map<string, Promise<void>>();
+async function withDomainLock<T>(domain: string, fn: () => Promise<T>): Promise<T> {
+  const prev = domainLocks.get(domain) ?? Promise.resolve();
+  let release!: () => void;
+  const next = new Promise<void>((r) => { release = r; });
+  domainLocks.set(domain, prev.then(() => next));
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (domainLocks.get(domain) === next) domainLocks.delete(domain);
+  }
+}
 
 export default defineBackground(() => {
   console.log('ClarifyLaw Background Worker loaded.');
 
-  // Context Menu Setup
-  browser.contextMenus.create({
-    id: 'clarifylaw-analyze-link',
-    title: 'Analyze this policy with ClarifyLaw',
-    contexts: ['link'],
+  // Context menu created once on install (idempotent against SW restarts) (#12).
+  browser.runtime.onInstalled.addListener(() => {
+    try {
+      browser.contextMenus.create({
+        id: 'clarifylaw-analyze-link',
+        title: 'Analyse this policy with ClarifyLaw',
+        contexts: ['link'],
+      });
+    } catch {
+      // Already exists (update) -- safe to ignore.
+    }
   });
 
   browser.contextMenus.onClicked.addListener(async (info, tab) => {
-    if (info.menuItemId === 'clarifylaw-analyze-link' && info.linkUrl) {
-      if (!tab?.url) return;
-      const domain = new URL(tab.url).hostname;
-      
-      // Attempt to guess policy type from URL, fallback to 'tos'
-      let type: PolicyType = 'tos';
-      const linkUrl = info.linkUrl.toLowerCase();
-      if (linkUrl.includes('privacy')) type = 'privacy';
-      else if (linkUrl.includes('cookie')) type = 'cookie';
-      else if (linkUrl.includes('eula')) type = 'eula';
-      
-      const payload = {
-        domain: domain,
-        pageUrl: tab.url,
-        policies: {
-          privacy: type === 'privacy' ? info.linkUrl : null,
-          tos: type === 'tos' ? info.linkUrl : null,
-          cookie: type === 'cookie' ? info.linkUrl : null,
-          eula: type === 'eula' ? info.linkUrl : null,
+    if (info.menuItemId !== 'clarifylaw-analyze-link' || !info.linkUrl) return;
+    if (!tab?.url) return;
+    const domain = new URL(tab.url).hostname;
+
+    // Classify by URL pattern instead of a fragile includes() check (#4).
+    // Falls back to 'tos' when the URL matches no known policy pattern.
+    const type: PolicyType = classifyByUrl(info.linkUrl) ?? 'tos';
+
+    const merged = { ...(await getDiscoveredPolicies(domain)) };
+    merged[type] = info.linkUrl;
+    await browser.storage.local.set(Object.fromEntries([[`discovered_${domain}`, merged]]));
+
+    triggerAnalysis(tab.url, domain, merged, {}, true)
+      .then((data) => {
+        if (data.status !== 'error') {
+          browser.runtime.sendMessage({ type: 'REPORT_READY', payload: data }).catch(() => { });
         }
-      };
-      
-      // Fetch existing discovered policies and merge
-      const existing = await getDiscoveredPolicies(domain);
-      const merged = { ...existing };
-      
-      if (type === 'privacy') merged.privacy = info.linkUrl;
-      else if (type === 'tos') merged.tos = info.linkUrl;
-      else if (type === 'cookie') merged.cookie = info.linkUrl;
-      else if (type === 'eula') merged.eula = info.linkUrl;
-      
-      // Store merged discovered policies
-      await browser.storage.local.set(Object.fromEntries([[`discovered_${domain}`, merged]]));
-      
-      // Force popup open (not always possible from background without user interaction, but we can set state)
-      // We will trigger analysis immediately
-      triggerAnalysis(tab.url, domain, merged, true);
-    }
+      })
+      .catch((err) => {
+        browser.runtime.sendMessage({ type: 'REPORT_ERROR', payload: { domain, error: err.message } }).catch(() => { });
+      });
   });
 
-  // Handle messages
-  browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+  // Unified message listener. Deliberately non-async and returns false for
+  // every branch: the popup drives state via out-of-band REPORT_* messages
+  // rather than the sendMessage response, so we never need to keep the channel
+  // open -- this avoids the async / return-true channel footgun (#9).
+  browser.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
     if (message.type === 'POLICIES_DETECTED') {
-      const { domain, policies } = message.payload as { domain: string; policies: Record<PolicyType, string | null> };
-      // Merge with any existing discovered policies for this domain
-      const key = `discovered_${domain}`;
-      const existing = await browser.storage.local.get(key);
-      const merged: Record<PolicyType, string | null> = (existing[key] as Record<PolicyType, string | null>) || {
-        privacy: null, tos: null, cookie: null, eula: null
+      const { domain, policies } = message.payload as {
+        domain: string; policies: Record<PolicyType, string | null>;
       };
-      
-      let changed = false;
-      for (const k of Object.keys(policies)) {
-        const pt = k as PolicyType;
-        if (policies[pt] && !merged[pt]) {
-          merged[pt] = policies[pt];
-          changed = true;
-        }
-      }
-      
-      if (changed) {
-        await browser.storage.local.set(Object.fromEntries([[key, merged]]));
-      }
+      handlePoliciesDetected(domain, policies).catch(() => { });
+      return false;
     }
-    
+
     if (message.type === 'GET_CURRENT_REPORT') {
-      const domain = message.payload.domain;
-      const siteUrl = message.payload.pageUrl || (domain ? `https://${domain}/` : undefined);
-      const forceRefresh = message.payload.forceRefresh || false;
-      // The popup asks the content script to scan the page and forwards the
-      // discovered policy URLs here. Fall back to storage if absent.
-      const policyUrls = message.payload.policyUrls ?? await getDiscoveredPolicies(domain);
+      const { domain, pageUrl, policyUrls, policyTexts, forceRefresh } = message.payload as {
+        domain: string;
+        pageUrl: string;
+        policyUrls: Record<PolicyType, string | null>;
+        policyTexts?: Partial<Record<PolicyType, string>>;
+        forceRefresh?: boolean;
+      };
+      const siteUrl = pageUrl || (domain ? `https://${domain}/` : undefined);
       if (!siteUrl) {
-        browser.runtime.sendMessage({ type: 'REPORT_ERROR', payload: { domain, error: 'No page URL to analyze.' } }).catch(() => {});
-        return true;
+        browser.runtime.sendMessage({ type: 'REPORT_ERROR', payload: { domain, error: 'No page URL to analyse.' } }).catch(() => { });
+        return false;
       }
-      triggerAnalysis(siteUrl, domain, policyUrls, forceRefresh).then((data) => {
-        if (data.status !== 'error') {
-          browser.runtime.sendMessage({ type: 'REPORT_READY', payload: data }).catch(() => {});
-        }
-      }).catch(err => {
-        browser.runtime.sendMessage({ type: 'REPORT_ERROR', payload: { domain, error: err.message } }).catch(() => {});
-      });
-      return true;
+      triggerAnalysis(siteUrl, domain, policyUrls, policyTexts ?? {}, forceRefresh ?? false)
+        .then((data) => {
+          if (data.status !== 'error') {
+            browser.runtime.sendMessage({ type: 'REPORT_READY', payload: data }).catch(() => { });
+          }
+        })
+        .catch((err) => {
+          browser.runtime.sendMessage({ type: 'REPORT_ERROR', payload: { domain, error: err.message } }).catch(() => { });
+        });
+      return false;
     }
 
     if (message.type === 'OPEN_FULL_REPORT') {
-      const domain = message.payload.domain;
-      // TODO: Replace with production web app URL when deployed (dev runs on localhost:5173).
-      const url = `http://localhost:5173/reports?domain=${encodeURIComponent(domain)}&source=extension`;
-      browser.tabs.create({ url });
+      const { domain } = message.payload as { domain: string };
+      browser.tabs.create({ url: `${WEB_APP_URL}/reports?domain=${encodeURIComponent(domain)}&source=extension` });
     }
+    return false;
   });
-  
+
+  async function handlePoliciesDetected(domain: string, policies: Record<PolicyType, string | null>) {
+    const key = `discovered_${domain}`;
+    // Serialize per-domain so concurrent messages don't clobber (#10).
+    await withDomainLock(domain, async () => {
+      const existing = await getDiscoveredPolicies(domain);
+      const merged: Record<PolicyType, string | null> = { ...existing };
+      let changed = false;
+      for (const k of Object.keys(policies) as PolicyType[]) {
+        if (policies[k] && !merged[k]) {
+          merged[k] = policies[k];
+          changed = true;
+        }
+      }
+      if (changed) {
+        await browser.storage.local.set(Object.fromEntries([[key, merged]]));
+      }
+    });
+  }
+
   async function getDiscoveredPolicies(domain: string): Promise<Record<PolicyType, string | null>> {
     const key = `discovered_${domain}`;
     const result = await browser.storage.local.get(key);
@@ -122,15 +148,21 @@ export default defineBackground(() => {
       let color = '#B91C1C'; // Red
       if (score >= 7.5) color = '#15803D'; // Green
       else if (score >= 5.0) color = '#A16207'; // Yellow
-      
+
       await browser.action.setBadgeBackgroundColor({ color });
       await browser.action.setBadgeText({ text: score.toFixed(1) });
     }
   }
 
-  async function triggerAnalysis(siteUrl: string, domain: string, policyUrls: Record<PolicyType, string | null>, forceRefresh = false): Promise<ExtensionPopupData> {
+  async function triggerAnalysis(
+    siteUrl: string,
+    domain: string,
+    policyUrls: Record<PolicyType, string | null>,
+    policyTexts: Partial<Record<PolicyType, string>>,
+    forceRefresh = false
+  ): Promise<ExtensionPopupData> {
     const cacheKey = `report:${domain}`;
-    
+
     // 1. Check local cache (Tier 1)
     if (!forceRefresh) {
       const cached = await browser.storage.local.get(cacheKey);
@@ -140,19 +172,15 @@ export default defineBackground(() => {
         return data;
       }
     }
-    
+
     await updateBadge(null, 'processing');
-    browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Discovering & analyzing policies...' } }).catch(() => {});
+    browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Discovering & analysing policies...' } }).catch(() => { });
 
     // Worker (Tier 2) -> backend /api/site/analyze (non-blocking job).
-    // 200 = done (cache hit / empty / content-hash reuse); 202 = poll.
-    // TODO: Update URL when deployed. Using localhost for dev.
-    const WORKER_URL = 'http://127.0.0.1:8787/api/site/analyze';
-
-    const post = () => fetch(WORKER_URL, {
+    const post = () => fetch(`${WORKER_URL}/api/site/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ siteUrl, policyUrls, forceRefresh }),
+      body: JSON.stringify({ siteUrl, policyUrls, policyTexts, forceRefresh }),
     });
 
     const buildPopupData = (report: ExtensionSiteReport): ExtensionPopupData => {
@@ -184,10 +212,10 @@ export default defineBackground(() => {
         const hostname = new URL(siteUrl).hostname;
         const deadline = Date.now() + 5 * 60 * 1000;
         let restarted = false;
-        const pollUrl = `${WORKER_URL}?hostname=${encodeURIComponent(hostname)}${forceRefresh ? '&forceRefresh=true' : ''}`;
+        const pollUrl = `${WORKER_URL}/api/site/analyze?hostname=${encodeURIComponent(hostname)}${forceRefresh ? '&forceRefresh=true' : ''}`;
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, 4000));
-          browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Analyzing policies (RAG pipeline)...' } }).catch(() => {});
+          browser.runtime.sendMessage({ type: 'REPORT_LOADING', payload: { domain, stage: 'Analysing policies (RAG pipeline)...' } }).catch(() => { });
           const g = await fetch(pollUrl);
           if (g.status === 200) {
             report = await g.json();
@@ -209,7 +237,9 @@ export default defineBackground(() => {
             throw new Error(e?.error || e?.detail || `Analysis failed (${g.status})`);
           }
         }
-        if (!report) throw new Error('Analysis timed out. Try again.');
+        // Soft failure (#13): distinguish "still running" from a hard error so
+        // the user can retry rather than seeing a generic timeout.
+        if (!report) throw new Error('Analysis is taking longer than usual on the free tier. Try again or check back shortly.');
       } else {
         const errJson = await res.json().catch(() => null);
         const detail = errJson?.error || errJson?.detail || (await res.text().catch(() => ''));
@@ -219,7 +249,7 @@ export default defineBackground(() => {
       const foundPolicyEntries = Object.entries(report!.policies || {});
       if (foundPolicyEntries.length === 0) {
         await updateBadge(null, 'no-policies');
-        browser.runtime.sendMessage({ type: 'NO_POLICIES', payload: { domain } }).catch(() => {});
+        browser.runtime.sendMessage({ type: 'NO_POLICIES', payload: { domain } }).catch(() => { });
         return {
           domain,
           siteName: domain,

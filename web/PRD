@@ -2,7 +2,7 @@
 
 > **Product Name:** ClarifyLaw
 > **Tagline:** "Stop signing blind. Reveal hidden risks."
-> **Repository:** `c:\Users\SBR\Desktop\T&C\web`
+> **Repository:** `c:\Users\SBR\Desktop\TnC\web`
 > **Date:** August 6, 2026
 
 ---
@@ -538,7 +538,7 @@ class DocumentAnalysisResult(CamelModel):
 
 ### How These Map to the Existing Frontend
 
-The existing frontend uses these interfaces in [mockData.ts](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/mockData.ts):
+The existing frontend uses these interfaces in [mockData.ts](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/mockData.ts):
 
 ```typescript
 // CURRENT (manually defined — will be DELETED)
@@ -832,15 +832,15 @@ response = client.models.generate_content(
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| [App.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/App.tsx) | Root component. State-based view router (`landing` / `analyzer` / `reports`). Global nav bar. | 109 |
-| [LandingPage.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/LandingPage.tsx) | Marketing landing page. Hero, feature bento grid, demo doc cards, footer CTA. | 341 |
-| [AnalyzerWorkspace.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/AnalyzerWorkspace.tsx) | Core workspace. File upload (drag/drop + paste), processing animation, clause sidebar list, side-by-side detail pane. Currently uses mock data and simulated processing delays. | 630 |
-| [ReportsView.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/ReportsView.tsx) | Browser extension simulation. Tabbed policy viewer (Privacy, ToS, Cookie, EULA) with mock site data. | 505 |
-| [ClayButton.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/ClayButton.tsx) | Reusable claymorphic button component (primary/secondary variants). | 56 |
-| [ClayCard.tsx](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/components/ClayCard.tsx) | Reusable claymorphic card component (default/low/medium/high risk variants). | 51 |
-| [mockData.ts](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/mockData.ts) | Mock documents and clauses. TO BE REPLACED with live API calls. | 124 |
-| [i18n.ts](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/i18n.ts) | Internationalization string map (English only currently). | 110 |
-| [index.css](file:///c:/Users/SBR/Desktop/T&C/web/frontend/src/index.css) | Tailwind theme tokens + claymorphic utility classes (clay-card, clay-btn, clay-input). | 166 |
+| [App.tsx](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/App.tsx) | Root component. State-based view router (`landing` / `analyzer` / `reports`). Global nav bar. | 109 |
+| [LandingPage.tsx](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/components/LandingPage.tsx) | Marketing landing page. Hero, feature bento grid, demo doc cards, footer CTA. | 341 |
+| [AnalyzerWorkspace.tsx](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/components/AnalyzerWorkspace.tsx) | Core workspace. File upload (drag/drop + paste), processing animation, clause sidebar list, side-by-side detail pane. Currently uses mock data and simulated processing delays. | 630 |
+| [ReportsView.tsx](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/components/ReportsView.tsx) | Browser extension simulation. Tabbed policy viewer (Privacy, ToS, Cookie, EULA) with mock site data. | 505 |
+| [ClayButton.tsx](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/components/ClayButton.tsx) | Reusable claymorphic button component (primary/secondary variants). | 56 |
+| [ClayCard.tsx](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/components/ClayCard.tsx) | Reusable claymorphic card component (default/low/medium/high risk variants). | 51 |
+| [mockData.ts](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/mockData.ts) | Mock documents and clauses. TO BE REPLACED with live API calls. | 124 |
+| [i18n.ts](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/i18n.ts) | Internationalization string map (English only currently). | 110 |
+| [index.css](file:///c:/Users/SBR/Desktop/TnC/web/frontend/src/index.css) | Tailwind theme tokens + claymorphic utility classes (clay-card, clay-btn, clay-input). | 166 |
 
 ### Current Flow (Mock)
 

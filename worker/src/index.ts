@@ -1,4 +1,4 @@
-import { AnalyzeRequest, ExtensionSiteReport, SiteAnalyzeRequest } from './types';
+import { SiteAnalyzeRequest } from './types';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,8 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-const inFlight = new Map<string, Promise<ExtensionSiteReport>>();
-
+// Best-effort per-isolate rate limit. The Cloudflare isolate is ephemeral, so
+// this Map is lost on eviction (a fresh isolate starts with a full token
+// bucket). Persisting to KV would cost a write per request and blow the
+// free-tier daily quota, so we accept best-effort here and rely on the
+// backend's start_or_get_job dedup for correctness (it collapses duplicate
+// jobs for the same hostname).
 const rateLimitMap = new Map<string, { tokens: number; lastRefill: number }>();
 const RATE_LIMIT_MAX = 20;
 const RATE_LIMIT_REFILL_RATE = 3;
@@ -32,85 +36,6 @@ export default {
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
-    }
-
-    if (url.pathname === '/api/analyze' && request.method === 'POST') {
-      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-      if (!checkRateLimit(ip)) {
-        return new Response(JSON.stringify({ error: 'Rate limit exceeded. Try again later.' }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      try {
-        const body: AnalyzeRequest = await request.json();
-        const { domain, policyUrls, policyTexts, forceRefresh } = body;
-
-        if (!domain) {
-          return new Response('Missing domain', { status: 400, headers: corsHeaders });
-        }
-
-        const cacheKey = `report:${domain}`;
-
-        if (!forceRefresh) {
-          const cachedStr = await env.CLARIFYLAW_CACHE.get(cacheKey);
-          if (cachedStr) {
-            return new Response(cachedStr, {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-        }
-
-        if (!forceRefresh && inFlight.has(domain)) {
-          const result = await inFlight.get(domain)!;
-          return new Response(JSON.stringify(result), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
-        const analysisPromise = Promise.race([
-          runAnalysis(domain, policyUrls, policyTexts, env),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Analysis timeout')), 300_000)
-          )
-        ]);
-        inFlight.set(domain, analysisPromise);
-
-        try {
-          const result = await analysisPromise;
-          ctx.waitUntil(
-            env.CLARIFYLAW_CACHE.put(cacheKey, JSON.stringify(result), {
-              expirationTtl: 30 * 24 * 60 * 60,
-            })
-          );
-          return new Response(JSON.stringify(result), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } finally {
-          inFlight.delete(domain);
-        }
-      } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
-    if (url.pathname === '/api/analyze' && request.method === 'GET') {
-      const domain = url.searchParams.get('domain');
-      if (!domain) {
-        return new Response('Missing domain', { status: 400, headers: corsHeaders });
-      }
-      const cacheKey = `report:${domain}`;
-      const cachedStr = await env.CLARIFYLAW_CACHE.get(cacheKey);
-      if (cachedStr) {
-        return new Response(cachedStr, {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({ error: 'Report not found', cacheMiss: true }), { status: 404, headers: corsHeaders });
     }
 
     if (url.pathname === '/api/site/analyze' && request.method === 'POST') {
@@ -160,7 +85,7 @@ export default {
         const backendRes = await fetch(`${backendUrl}/api/site/analyze`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ siteUrl, policy_urls: policyUrls ?? {}, policy_texts: policyTexts ?? {} }),
+          body: JSON.stringify({ siteUrl, policy_urls: policyUrls ?? {}, policy_texts: policyTexts ?? {}, force_refresh: forceRefresh ?? false }),
         });
 
         const backendText = await backendRes.text();
@@ -223,20 +148,3 @@ export default {
     return new Response('Not Found', { status: 404, headers: corsHeaders });
   },
 };
-
-async function runAnalysis(domain: string, policyUrls: AnalyzeRequest['policyUrls'], policyTexts: AnalyzeRequest['policyTexts'], env: Env): Promise<ExtensionSiteReport> {
-  const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001';
-
-  const res = await fetch(`${backendUrl}/api/extension/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ domain, policy_urls: policyUrls, policy_texts: policyTexts ?? {} }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Backend error: ${res.status} - ${text}`);
-  }
-
-  return await res.json();
-}
