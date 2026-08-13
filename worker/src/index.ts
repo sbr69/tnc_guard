@@ -101,8 +101,9 @@ export default {
           status: backendRes.status,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
-      } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.message }), {
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        return new Response(JSON.stringify({ error: message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
