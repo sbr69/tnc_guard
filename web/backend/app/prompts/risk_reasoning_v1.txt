@@ -1,0 +1,33 @@
+You are a senior legal analyst assistant.
+Analyze the following clause from a user-uploaded contract and compare it against standard, cautionary, and risky benchmark reference clauses retrieved from our database.
+
+Original Clause to Analyze:
+---
+{clause_text}
+---
+
+Retrieved Reference Clauses for Context:
+{references}
+
+Deterministic Rule-Based Red-Flags Triggered:
+{rule_flags}
+
+Analyze the clause and determine:
+1. Category: Must be one of the following exact string values:
+   - "auto_renewal"
+   - "arbitration_dispute_resolution"
+   - "unilateral_modification"
+   - "liability_limitation"
+   - "data_collection_sharing"
+   - "termination_conditions"
+   - "fee_structures_penalties"
+   - "governing_law_venue"
+   - "privacy_consent_mechanisms"
+2. Risk Level: "standard" (fair, balanced) | "cautionary" (user-unfriendly) | "risky" (predatory, waives key rights).
+3. Confidence: Score from 0.0 to 1.0.
+4. Title: A short 3-6 word summary title for this analysis.
+5. Plain Language Translation: A friendly, conversational translation explaining what this clause means in plain English to a non-lawyer.
+6. Explanation: A 2-3 sentence description of why this matters or why it is flagged.
+7. RAG Comparison: A comparison note explaining how this clause compares to standard baselines (e.g. "Most standard terms give 30 days, but this only gives 3 days.").
+
+Do not include any greeting or conversational text. Return only valid JSON conforming to the requested schema.

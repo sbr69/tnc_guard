@@ -45,6 +45,7 @@ docs/
 # Allow backend deployment files
 !web/backend/requirements.txt
 !web/backend/README.md
+!web/backend/app/prompts/*.txt
 
 # WXT & Extension
 .wxt/

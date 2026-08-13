@@ -69,3 +69,4 @@ docs/
 # Allow backend deployment files
 !backend/requirements.txt
 !backend/README.md
+!backend/app/prompts/*.txt
