@@ -8,8 +8,5 @@ BACKEND_API_URL = "https://unmask-terms-api.onrender.com"
 
 [[kv_namespaces]]
 binding = "UNMASK_TERMS_CACHE"
-# Replaced with real IDs after running:
-#   npx wrangler kv namespace create UNMASK_TERMS_CACHE
-#   npx wrangler kv namespace create UNMASK_TERMS_CACHE --preview
-id = "preview_id_replace_me_in_prod"
-preview_id = "preview_id"
+id = "6ec28cde609546fcad2f46d54a578253"
+preview_id = "f2b526fef1dc4bbcb66a6c6999c75c97"
