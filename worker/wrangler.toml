@@ -3,9 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2024-04-05"
 
 [vars]
-BACKEND_API_URL = "http://127.0.0.1:8001" # Default for local dev
+# Updated after backend deploy — set to Render URL like https://unmask-terms-api.onrender.com
+BACKEND_API_URL = "https://unmask-terms-api.onrender.com"
 
 [[kv_namespaces]]
 binding = "UNMASK_TERMS_CACHE"
+# Replaced with real IDs after running:
+#   npx wrangler kv namespace create UNMASK_TERMS_CACHE
+#   npx wrangler kv namespace create UNMASK_TERMS_CACHE --preview
 id = "preview_id_replace_me_in_prod"
 preview_id = "preview_id"

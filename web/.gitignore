@@ -66,3 +66,6 @@ Desktop.ini
 docs/
 *.md
 *.txt
+# Allow backend deployment files
+!backend/requirements.txt
+!backend/README.md

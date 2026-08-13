@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: unmask-terms-api
+    runtime: python
+    rootDir: web/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GEMINI_RPM
+        value: "14"
+      - key: GEMINI_BURST
+        value: "3"

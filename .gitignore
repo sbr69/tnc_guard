@@ -42,6 +42,9 @@ coverage/
 docs/
 *.md
 *.txt
+# Allow backend deployment files
+!web/backend/requirements.txt
+!web/backend/README.md
 
 # WXT & Extension
 .wxt/
