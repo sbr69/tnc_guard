@@ -56,3 +56,7 @@ web-ext.config.ts
 # Cloudflare Worker
 .wrangler/
 .dev.vars
+
+# Local secret handoff (never commit)
+.worker-secret*
+*.secret.local

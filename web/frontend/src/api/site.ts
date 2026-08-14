@@ -57,8 +57,6 @@ export interface ExtensionSiteReport {
 
 const WORKER_URL =
   ((import.meta.env.VITE_WORKER_URL as string | undefined) ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
-const BACKEND_URL =
-  ((import.meta.env.VITE_API_URL as string | undefined) ?? 'http://127.0.0.1:8001').replace(/\/$/, '');
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -154,7 +152,7 @@ export async function hydrateSiteReport(report: ExtensionSiteReport): Promise<Ex
       const p = summary as PolicySummary;
       let clauses: ExtensionReportClause[] = [];
       try {
-        const docRes = await fetch(`${BACKEND_URL}/api/documents/${p.documentId}`);
+        const docRes = await fetch(`${WORKER_URL}/api/documents/${p.documentId}`);
         if (docRes.ok) {
           const docData = await docRes.json();
           clauses = (docData.clauses || []).map(mapClause);

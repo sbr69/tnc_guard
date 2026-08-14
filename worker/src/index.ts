@@ -3,7 +3,7 @@ import { SiteAnalyzeRequest } from './types';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Worker-Token',
 };
 
 // Best-effort per-isolate rate limit. The Cloudflare isolate is ephemeral, so
@@ -28,6 +28,17 @@ function checkRateLimit(ip: string): boolean {
   entry.tokens -= 1;
   rateLimitMap.set(ip, entry);
   return true;
+}
+
+// Headers for an outbound call to the backend. Always attaches the shared
+// worker secret (X-Worker-Token) when configured so the backend's
+// verify_worker_token dependency accepts the request. The secret is a wrangler
+// secret (not in wrangler.jsonc), declared in src/env.d.ts.
+function authedHeaders(env: Env, contentType?: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (contentType) headers['Content-Type'] = contentType;
+  if (env.WORKER_SHARED_SECRET) headers['X-Worker-Token'] = env.WORKER_SHARED_SECRET;
+  return headers;
 }
 
 export default {
@@ -84,7 +95,7 @@ export default {
         const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001';
         const backendRes = await fetch(`${backendUrl}/api/site/analyze`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authedHeaders(env, 'application/json'),
           body: JSON.stringify({ siteUrl, policy_urls: policyUrls ?? {}, policy_texts: policyTexts ?? {}, force_refresh: forceRefresh ?? false }),
         });
 
@@ -130,7 +141,8 @@ export default {
       // Poll the backend job status.
       const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001';
       const backendRes = await fetch(
-        `${backendUrl}/api/site/status?hostname=${encodeURIComponent(hostname)}`
+        `${backendUrl}/api/site/status?hostname=${encodeURIComponent(hostname)}`,
+        { headers: authedHeaders(env) }
       );
       const backendText = await backendRes.text();
       if (backendRes.status === 200) {
@@ -143,6 +155,38 @@ export default {
       return new Response(backendText, {
         status: backendRes.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Proxy the documents API (uploads + reads) to the backend with the worker
+    // token. The backend rejects these without it, so the only way to reach the
+    // Gemini-burning upload endpoint is through this worker (which rate-limits).
+    if (url.pathname.startsWith('/api/documents')) {
+      if (request.method === 'POST') {
+        const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+        if (!checkRateLimit(ip)) {
+          return new Response(JSON.stringify({ error: 'Rate limit exceeded. Try again later.' }), {
+            status: 429,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+
+      const backendUrl = env.BACKEND_API_URL || 'http://127.0.0.1:8001';
+      const backendRes = await fetch(`${backendUrl}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers: authedHeaders(env, request.headers.get('Content-Type') || undefined),
+        body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
+      });
+
+      // Stream the backend response straight back to the client; document
+      // payloads are JSON and bounded, but streaming avoids buffering.
+      const responseHeaders: Record<string, string> = { ...corsHeaders };
+      const contentType = backendRes.headers.get('Content-Type');
+      if (contentType) responseHeaders['Content-Type'] = contentType;
+      return new Response(backendRes.body, {
+        status: backendRes.status,
+        headers: responseHeaders,
       });
     }
 

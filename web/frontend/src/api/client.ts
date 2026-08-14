@@ -3,7 +3,8 @@ import { components } from './types';
 
 type DocumentAnalysisResult = components['schemas']['DocumentAnalysisResult'];
 
-const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/$/, '');
+const API_BASE =
+  ((import.meta.env.VITE_WORKER_URL as string | undefined) ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
 
 async function fetchWithTimeout(
   url: string,
