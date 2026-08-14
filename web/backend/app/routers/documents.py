@@ -1,11 +1,16 @@
 import uuid
 from cachetools import TTLCache
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, BackgroundTasks, HTTPException
+from ..auth import verify_worker_token
 from ..models.document import DocumentAnalysisResult, DocumentStatus
 from ..pipeline import run_analysis_pipeline
 from ..services.db import save_placeholder_document, get_document_analysis
 
-router = APIRouter(prefix="/api/documents", tags=["Documents"])
+router = APIRouter(
+    prefix="/api/documents",
+    tags=["Documents"],
+    dependencies=[Depends(verify_worker_token)],
+)
 
 _result_cache = TTLCache(maxsize=100, ttl=300)
 

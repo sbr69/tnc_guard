@@ -1,12 +1,17 @@
 from urllib.parse import urlparse
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from ..auth import verify_worker_token
 from ..models.base import CamelModel
 from ..models.extension import ExtensionSiteReport
 from ..services.site_analyzer import build_site_report
 from ..services.site_jobs import start_or_get_job, await_job_briefly, get_job
 
-router = APIRouter(prefix="/api/site", tags=["Site"])
+router = APIRouter(
+    prefix="/api/site",
+    tags=["Site"],
+    dependencies=[Depends(verify_worker_token)],
+)
 
 
 class SiteAnalyzeRequest(CamelModel):
