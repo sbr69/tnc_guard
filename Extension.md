@@ -2,9 +2,6 @@
 
 A Manifest V3 browser extension that analyses the legal documents of any website in real time. It discovers privacy policies, terms of service, cookie policies, and EULAs on the current page, runs them through the Unmask Terms analysis pipeline, and shows you a safety score with flagged risks — all without leaving the site.
 
-> 📌 For the web platform (backend + frontend), see the [root README](../README.md).  
-> 📖 For detailed internals, see [`docs.md`](../docs.md#extension-internals).
-
 ---
 
 ## Features

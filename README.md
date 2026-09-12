@@ -2,6 +2,8 @@
 
 Unmask Terms is an AI-powered legal document analysis platform that automatically discovers, parses, and evaluates the privacy policies, terms of service, cookie policies, and EULAs of any website. It surfaces hidden risks, translates legalese into plain language, and assigns a quantified safety score — giving users the information they need before they agree to anything.
 
+> **Looking for the Browser Extension?** See the [Browser Extension Documentation](Extension.md).
+
 ---
 
 ## What It Does
