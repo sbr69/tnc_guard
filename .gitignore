@@ -41,6 +41,7 @@ coverage/
 # Docs and notes
 docs/
 *.md
+!README.md
 *.txt
 nul
 # Allow backend deployment files

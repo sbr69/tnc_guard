@@ -19,27 +19,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
   return (
     <div className="relative overflow-x-hidden min-h-screen">
-      {/* Top Navigation */}
-      <header className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between border-b border-[#FFEDD5]">
-        <div className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer" onClick={() => onStart('acme-tos')}>
-          <img src="/TnC_favicon.png" alt="Logo" className="w-8 h-8 sm:w-10 sm:h-10 object-contain shrink-0" />
-          <span className="text-xl sm:text-2xl font-bold tracking-tight text-brand-ink">
-            {t('clarify')}<span className="text-orange-500">{t('law')}</span>
-          </span>
-        </div>
-        
-        <nav className="hidden md:flex items-center space-x-8 font-medium text-gray-600">
-          <a href="#features" className="hover:text-orange-500 transition-colors">{t('features')}</a>
-          <a href="#bento" className="hover:text-orange-500 transition-colors">{t('howItWorks')}</a>
-          {demoDocs.length > 0 && <a href="#demo" className="hover:text-orange-500 transition-colors">{t('demoDocs')}</a>}
-        </nav>
-
-        <div>
-          <ClayButton variant="primary" onClick={() => onStart()} className="text-xs px-4 py-2 min-h-10">
-            {t('analyzeAgreement')}
-          </ClayButton>
-        </div>
-      </header>
 
       {/* Hero Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 sm:pt-16 pb-12 sm:pb-20 grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-12 items-center">

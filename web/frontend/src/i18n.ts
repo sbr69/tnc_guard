@@ -104,6 +104,7 @@ export const translations = {
     documentWorkspaceNav: "Document Workspace",
     extensionReportsNav: "Extension Reports (/reports)",
     checkExtensionDemoNav: "Check Extension Demo",
+    extensionDocs: "Extension",
     loadingExtensionReport: "Loading Report...",
     fetchingClauses: "Fetching analyzed clauses.",
     errorLoadingExtensionReport: "Error Loading Report",

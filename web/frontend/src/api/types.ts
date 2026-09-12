@@ -304,7 +304,9 @@ export interface operations {
     upload_document_api_documents_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-worker-token"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -337,7 +339,9 @@ export interface operations {
     get_document_api_documents__document_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-worker-token"?: string | null;
+            };
             path: {
                 document_id: string;
             };
@@ -368,7 +372,9 @@ export interface operations {
     get_demo_documents_api_documents_demo_all_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-worker-token"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -381,6 +387,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -408,7 +423,9 @@ export interface operations {
     analyze_site_url_api_site_analyze_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-worker-token"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -443,7 +460,9 @@ export interface operations {
             query: {
                 hostname: string;
             };
-            header?: never;
+            header?: {
+                "x-worker-token"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
